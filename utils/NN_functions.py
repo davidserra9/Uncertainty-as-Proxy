@@ -15,14 +15,24 @@ from sklearn.metrics import confusion_matrix
 from albumentations.pytorch import ToTensorV2
 
 def initialize_model(model_name, num_classes, load_model, balance, data_aug, model_root):
-    """
-    Function to initialize the model depending on the desired architecture.
-    :param model_name: (str) name of the architecture
-    :param num_classes: (int) number of the classes to classify
-    :param load_model: (boolean) load the weights of an existing model or not
-    :param balance: (str) when loading an existing model, undersampling, oversampling or other
-    :param data_aug: (boolean) when loading an existing model, data augmentation when training or not
-    :return: (object) model
+    """ Function to initialize the model depending on the desired architecture.
+
+        Parameters
+        ----------
+        model_name : string
+            name of the model to initialize
+        num_classes : int
+            number of classes to predict
+        load_model : boolean
+            if True, load the model from the disk
+        balance : string
+            when loading an existing model, undersampling, oversampling or other
+        data_aug : boolean
+            when loading an existing model, data augmentation when training or not
+
+        Returns
+        -------
+        model : object
     """
 
     # Initialize the desired architecture and change the last linear layer to fit the number of classes
@@ -30,6 +40,7 @@ def initialize_model(model_name, num_classes, load_model, balance, data_aug, mod
         model = torch.hub.load('pytorch/vision:v0.8.0', model_name, pretrained=True)
         num_ftrs = model.fc.in_features
         model.fc = nn.Linear(num_ftrs, num_classes)
+        model.name = model_name
 
     else:
         raise Exception('Wrong model name: {}'.format(model_name))
@@ -57,16 +68,31 @@ def initialize_model(model_name, num_classes, load_model, balance, data_aug, mod
     return model
 
 def train_fn(loader, model, optimizer, loss_fn, scaler, device, epoch_num):
-    """
-    Function to train the model with one epoch
-    :param loader: Dataloder, train dataloader
-    :param model: object, model to train
-    :param optimizer: optimizer object
-    :param loss_fn: loss
-    :param scaler: scaler object
-    :param device: string ('cuda' or cpu')
-    :param epoch_num: int number of epoch in which the model is going to be trained
-    :return: float, float (accuracy, loss)
+    """ Function to train the model with one epoch
+
+        Parameters
+        ----------
+        loader : object
+            pytorch dataloader
+        model : object
+            pytorch model
+        optimizer : object
+            pytorch optimizer
+        loss_fn : object
+            pytorch loss function
+        scaler : object
+            pytorch scaler
+        device : string
+            cuda or cpu
+        epoch_num : int
+            current epoch number
+
+        Returns
+        -------
+        epoch_acc : float
+            accuracy of the model
+        epoch_loss : float
+            loss of the model
     """
 
     model.train()
@@ -91,8 +117,9 @@ def train_fn(loader, model, optimizer, loss_fn, scaler, device, epoch_num):
         correct += (predictions == targets).sum().item()        # Subtotal of the correct predictions
         loss_sum += loss.item()                                 # Subtotal of the correct losses
 
-        loss.backward()                                         # Backprop
-        optimizer.step()                                        # Grad Desc
+        scaler.scale(loss).backward()                           # Backward pass
+        scaler.step(optimizer)                                  # Update the weights
+        scaler.update()                                         # Update the scale
 
         loop.set_postfix(acc=correct / total_samples,
                          loss=loss_sum / (idx+1))
@@ -103,7 +130,30 @@ def train_fn(loader, model, optimizer, loss_fn, scaler, device, epoch_num):
     return epoch_acc, epoch_loss
 
 def eval_fn(loader, model, loss_fn, device, epoch_num):
+    """ Function to evaluate the model with one epoch
 
+        Parameters
+        ----------
+        loader : object
+            pytorch dataloader
+        model : object
+            pytorch model
+        loss_fn : object
+            pytorch loss function
+        device : string
+            cuda or cpu
+        epoch_num : int
+            current epoch number
+
+        Returns
+        -------
+        epoch_acc : float
+            accuracy of the model (current epoch)
+        epoch_loss : float
+            loss of the model   (current epoch)
+        epoch_f1 : float
+            f1 score of the model (current epoch)
+    """
 
     model.eval()
 
@@ -159,7 +209,7 @@ def eval_fn(loader, model, loss_fn, device, epoch_num):
         return epoch_acc, epoch_loss, epoch_f1
 
 def pred_fn(folder_path, model, list_classes, n_images, output_path, device) -> None:
-    """Function to run inference on some images of the test set and compute teh confusion matrix
+    """ Function to run inference on some images of the test set
 
         Parameters
         ----------
@@ -495,7 +545,29 @@ def inference_saved_model(loader, folder_path, model, list_classes, n_images, n_
                                 output_path=join(next_folder, "MC_dropout"),
                                 device=device)
 
-def save_model(model, optimizer, num_epoch, acc, f1, model_root, model_name, balance, data_aug):
+def save_model(model, optimizer, num_epoch, acc, f1, model_root, balance, data_aug):
+    """ Function to save the model in the desired folder.
+
+        Parameters
+        ----------
+        model : object
+            pytorch model
+        optimizer : object
+            pytorch optimizer
+        num_epoch : int
+            number of epochs trained on
+        acc : float
+            accuracy of the model
+        f1 : float
+            f1 score of the model
+        model_root : str
+            string of the folder/root path where the model will be saved
+        balance : str
+            'oversampling', 'undersampling' or other to identify how the model has been trained
+        data_aug : bool
+            True if the data augmentation has been used to train the model
+    """
+
     checkpoint = {
         "state_dict": model.state_dict(),
         "optimizer": optimizer.state_dict(),
@@ -507,15 +579,15 @@ def save_model(model, optimizer, num_epoch, acc, f1, model_root, model_name, bal
     # Model path
     if balance in ["oversampling", "undersampling"]:
         if data_aug:
-            model_path = join(model_root, "_".join([model_name, balance, "DA"]) + ".pth.tar")
+            model_path = join(model_root, "_".join([model.name, balance, "DA"]) + ".pth.tar")
         else:
-            model_path = join(model_root, "_".join([model_name, balance]) + ".pth.tar")
+            model_path = join(model_root, "_".join([model.name, balance]) + ".pth.tar")
 
     else:
         if data_aug:
-            model_path = join(model_root, "_".join([model_name, "DA"]) + ".pth.tar")
+            model_path = join(model_root, "_".join([model.name, "DA"]) + ".pth.tar")
         else:
-            model_path = join(model_root, model_name + ".pth.tar")
+            model_path = join(model_root, model.name + ".pth.tar")
 
     torch.save(checkpoint, model_path)
     print("Model saved...")

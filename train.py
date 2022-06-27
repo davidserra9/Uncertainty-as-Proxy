@@ -10,6 +10,7 @@ from utils.UW_dataset import UWDataset
 from utils.NN_functions import initialize_model, train_fn, eval_fn, save_model
 
 def main():
+    """ Main function of the model (training and evaluation) """
 
     cfg = load_yml("config.yml")
     DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
@@ -76,7 +77,7 @@ def main():
     test_metrics = {'accuracy': [], 'loss': [], 'f1': []}
 
     print("")
-    print("----------- MODEL: {} --------------".format('resnet18'))
+    print("----------- MODEL: {} --------------".format(model.name))
     print("----------- TRAINING START --------------")
     print("")
     time.sleep(1)

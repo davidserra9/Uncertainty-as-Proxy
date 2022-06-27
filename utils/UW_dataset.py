@@ -12,19 +12,24 @@ from torchvision import transforms as transforms
 from utils.config_parser import load_yml
 
 class UWDataset(Dataset):
-    """
-    Custom dataset class for loading images and labels from a list of directories divided in splits.
-    """
+    """ Custom dataset class for loading images and labels from a list of directories divided in splits """
 
     def __init__(self, split_list, cfg, set, balance="", data_aug=False):
-        """
-        Initialize the dataset object. To initialize it, the function creates a list of dictionaries with the path of
-        the image and its label.
-        :param split_list: list, list of the split directories
-        :param config: dictionary, config
-        :param set: str, train or test
-        :param balance: str, oversampling, undersampling or else
-        :param dataaug: boolean, True or False
+        """ Initialize the dataset object. To initialize it, the function creates a list of dictionaries with the path
+            of the image and its label.
+
+            Parameters
+            ----------
+            split_list : list
+                List of paths to the splits.
+            cfg : dict or Box object
+                Configuration dictionary.
+            set : str
+                train or test.
+            balance : str
+                oversampling, undersampling or other
+            data_aug : bool
+                Whether to apply data augmentation or not.
         """
 
         self.set = set          # Save the set
@@ -223,10 +228,13 @@ class UWDataset(Dataset):
                 ToTensorV2()
             ])
 
-    def __len__(self):
+    def __len__(self) -> int:
+        """ Length of the dataset. """
+
         return len(self.annotations)
 
     def __getitem__(self, index):
+        """ Get the item at the given index. """
 
         if self.set == "train":
             # Read image and transform it
