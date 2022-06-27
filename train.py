@@ -7,7 +7,7 @@ from os.path import join
 from torch.utils.data import DataLoader
 from utils.config_parser import load_yml
 from utils.UW_dataset import UWDataset
-from utils.NN_functions import initialize_model, train_fn, eval_fn, save_model
+from utils.NN_functions import initialize_model, train_fn, eval_fn, save_model, inference_saved_model
 
 def main():
     """ Main function of the model (training and evaluation) """
@@ -101,7 +101,6 @@ def main():
                        acc=test_acc,
                        f1=test_f1,
                        model_root=cfg.model_path,
-                       model_name=cfg.species_classification.model,
                        balance=cfg.species_classification.balance,
                        data_aug=cfg.species_classification.data_aug)
 
@@ -110,6 +109,30 @@ def main():
                    "test_loss": test_loss,
                    "test_accuracy": test_acc,
                    "test_f1": test_f1})
+
+    # Once the training has ended, run inference on the best model
+
+    print("")
+    print("----------- MODEL: {} --------------".format(model.__class__.__name__))
+    print("----------- INFERENCE START --------------")
+    print("")
+
+    model = initialize_model(model_name=cfg.species_classification.model,
+                             num_classes=len(cfg.species),
+                             load_model=True,
+                             balance=cfg.species_classification.balance,
+                             data_aug=cfg.species_classification.data_aug,
+                             model_root=cfg.model_path)
+    model.to(DEVICE)
+
+    inference_saved_model(loader=test_loader,
+                          folder_path=join(cfg.species_dataset, f"split_{cfg.species_classification.test_splits[0]}"),
+                          model=model,
+                          list_classes=cfg.species,
+                          n_images=50,
+                          n_mc_samples=100,
+                          output_root=cfg.output_path,
+                          device=DEVICE)
 
 if __name__ == '__main__':
     main()
