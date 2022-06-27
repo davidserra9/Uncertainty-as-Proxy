@@ -1,0 +1,29 @@
+video_path: "/media/david/media/TFM/dataset/videos"
+excels_path: "/media/david/media/TFM/dataset/excels"
+species_dataset: "/media/david/media/TFM/dataset/images"
+bottom_dataset: "/media/david/media/TFM/dataset/bottom"
+output_path: "/media/david/media/TFM/experiments"
+model_path: "/media/david/media/TFM/models"
+
+species: ["Spatangus purpureus",
+          "Echinaster sepositus",
+          "Cerianthus membranaceus",
+          "Bonellia viridis",
+          "Scyliorhinus canicula",
+          "Ophiura ophiura",
+          "none"]
+
+species_classification:
+  model: "resnet18"
+  train_splits: [0, 1, 2, 3]
+  val_splits: []
+  test_splits: [4]
+  balance: "oversampling"
+  data_aug: true
+  batch_size: 32
+  num_epochs: 500
+  learning_rate: 0.001
+  num_workers: 12
+  load_model: true
+  save_model: false
+  pin_memory: true
