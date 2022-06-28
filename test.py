@@ -16,6 +16,16 @@ model = initialize_model(model_name=cfg.species_classification.model,
                          data_aug=cfg.species_classification.data_aug,
                          model_root=cfg.model_path)
 
+model.to('cuda')
+generate_CAMs(folder_path=join(cfg.species_dataset, f"split_{cfg.species_classification.test_splits[0]}"),
+              model=model,
+              list_classes=cfg.species,
+              n_images=5,
+              output_path="",
+              device="cuda")
+
+
+model.to('cpu')
 transformations = A.Compose([
     A.Resize(224, 224),
     A.Normalize(mean=[0.4493, 0.5078, 0.4237],
@@ -46,7 +56,7 @@ def returnCAM(feature_conv, weight_softmax, class_idx):
 def show_cam(CAMs, width, height, orig_image, class_idx, all_classes, save_name):
     for i, cam in enumerate(CAMs):
         heatmap = cv2.applyColorMap(cv2.resize(cam,(width, height)), cv2.COLORMAP_JET)
-        result = heatmap * 0.3 + orig_image * 0.5
+        result = heatmap * 0.05 + orig_image * 1
         # put class label text on the result
         cv2.putText(result, all_classes[class_idx[i]], (20, 40),
                     cv2.FONT_HERSHEY_SIMPLEX, 1.5, (0, 255, 0), 2)
@@ -59,7 +69,7 @@ model._modules.get("layer4").register_forward_hook(hook_feature)
 params = list(model.parameters())
 weight_softmax = np.squeeze(params[-2].data.numpy())
 
-img_original = cv2.imread('/media/david/media/TFM/dataset/images/split_4/Bonellia viridis_0239a.jpg')[:,:,::-1]
+img_original = cv2.imread('/home/david/Desktop/test/Echinaster sepositus_0958c.jpg')[:,:,::-1]
 img = transformations(image=img_original)['image']
 img = img.unsqueeze(0)
 outputs = model(img)
@@ -70,9 +80,9 @@ print(probs)
 CAMs = returnCAM(features_blobs[0], weight_softmax, [class_idx])
 
 heatmap = cv2.applyColorMap(cv2.resize(CAMs[0], (img_original.shape[1], img_original.shape[0])), cv2.COLORMAP_JET)
-result = heatmap * 0.3 + img_original * 0.5
-cv2.putText(result, cfg.species[class_idx], (20, 40),
-                    cv2.FONT_HERSHEY_SIMPLEX, 1.5, (0, 255, 0), 2)
+result = heatmap * 0.1 + img_original * 0.9
+cv2.putText(result, cfg.species[class_idx], (20, 60),
+                    cv2.FONT_HERSHEY_SIMPLEX, 2, (255, 0, 0), 2)
 
 plt.imshow(result/255.)
 plt.show()

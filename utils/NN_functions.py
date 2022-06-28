@@ -10,6 +10,7 @@ from os.path import join
 from sklearn.metrics import f1_score
 from tqdm import tqdm
 import matplotlib.pyplot as plt
+import torch.nn.functional as F
 from glob import glob
 from sklearn.metrics import confusion_matrix
 from albumentations.pytorch import ToTensorV2
@@ -41,6 +42,8 @@ def initialize_model(model_name, num_classes, load_model, balance, data_aug, mod
         num_ftrs = model.fc.in_features
         model.fc = nn.Linear(num_ftrs, num_classes)
         model.name = model_name
+        # Delete
+        model.fc.register_forward_hook(lambda m, inp, out: F.dropout(out, p=0.5, training=m.training))
 
     else:
         raise Exception('Wrong model name: {}'.format(model_name))
@@ -241,7 +244,7 @@ def pred_fn(folder_path, model, list_classes, n_images, output_path, device) -> 
                 ToTensorV2()
             ])
 
-    for idx_query, im_path in tqdm(enumerate(query_images), desc="Running inference"):
+    for idx_query, im_path in enumerate(tqdm(query_images, desc="Running inference")):
         same_annot = [cv2.imread(path)[:, :, ::-1] for path in sorted(all_images) if im_path[:-5] in path]
 
         num_img = len(same_annot)
@@ -435,7 +438,7 @@ def get_monte_carlo_predictions(folder_path, forward_passes, model, list_classes
 
     all_images = glob(join(folder_path, "*.jpg"))   # Get all the images in the folder
     random.shuffle(all_images)                      # Shuffle the image paths
-    query_images = all_images[:n_images]           # Get the first 20 images (randomly chosen)
+    query_images = all_images[:n_images]            # Get the first 20 images (randomly chosen)
 
     # Find all the images of the same annotation
     same_annot = [[r for r in sorted(all_images) if q[:-5] in r] for q in query_images]
@@ -485,6 +488,88 @@ def get_monte_carlo_predictions(folder_path, forward_passes, model, list_classes
         plt.savefig(join(output_path, f"{output_path.split('/')[-2]}_{idx_query:02}.png"))
         plt.close()
 
+def return_CAM(feature_conv, weight_softmax, class_idx):
+    size_upsample = (256, 256)
+    bz, nc, h, w = feature_conv.shape
+    output_cam = []
+    cam = weight_softmax[class_idx].dot(feature_conv.reshape((nc, h * w)))
+    cam = cam.reshape(h, w)
+    cam = cam - np.min(cam)
+    cam_img = cam / np.max(cam)
+    cam_img = np.uint8(255*cam_img)
+    return cv2.resize(cam_img, size_upsample)
+
+def generate_CAMs(folder_path, model, list_classes, n_images, output_path, device) -> None:
+    """ Function to generate the CAMs for the images in the folder_path
+
+        Parameters
+        ----------
+        folder_path : str
+            string of the folder path which contains the inference images
+        model : object
+            pytorch model
+        list_classes : list
+            list with the name of the classes
+        n_images : int
+            number of samples to run the example (taken randomly)
+        output_path : str
+            string of the folder path where the output files will be saved
+        device : str
+            'cuda' or 'cpu'
+    """
+
+    model.eval()                        # Ensure that the model is in evaluation mode
+
+    all_images = glob(join(folder_path, "*.jpg"))   # Get all the images in the folder
+    random.shuffle(all_images)                      # Shuffle the image paths
+    query_images = all_images[:n_images]            # Get the first 20 images (randomly chosen)
+
+    # Find all the images of the same annotation
+    same_annot = [[r for r in sorted(all_images) if q[:-5] in r] for q in query_images]
+
+    transformations = A.Compose([
+        A.Resize(224, 224),
+        A.Normalize(mean=[0.4493, 0.5078, 0.4237],
+                    std=[0.1263, 0.1265, 0.1169]),
+        ToTensorV2()
+    ])
+
+    def hook_feature(module, input, output):
+        feature_blobs.append(output.data.cpu().numpy())
+
+    # For ResNet18
+    model._modules.get('layer4').register_forward_hook(hook_feature)
+
+    params = list(model.parameters())
+    weight_softmax = params[-2].data.cpu().numpy()
+
+    for idx_query, lst_paths in enumerate(tqdm(same_annot, desc="CAMs")):
+        feature_blobs = []
+        same_annot = [cv2.imread(path)[:, :, ::-1] for path in lst_paths]
+
+        num_img = len(same_annot)
+        plt.figure(figsize=(20, 5))
+
+        for idx, image in enumerate(same_annot):
+
+            outputs = model(transformations(image=image)["image"].unsqueeze(0).to(device))
+            probs = F.softmax(outputs, dim=1).data.squeeze()
+            class_idx = torch.argmax(probs).item()
+            CAM = return_CAM(feature_blobs[-1], weight_softmax, class_idx)
+
+            heatmap = cv2.applyColorMap(cv2.resize(CAM, (image.shape[1], image.shape[0])), cv2.COLORMAP_JET)[:,:,::-1]
+            result = heatmap * 0.4 + image * 0.9
+            plt.subplot(1, num_img, idx+1)
+            plt.title(f"Pred: {list_classes[class_idx]}")
+            plt.imshow(result / np.max(result))
+            plt.axis('off')
+
+        plt.suptitle(f"Ground Truth: {lst_paths[0].split('/')[-1].split('_')[0]}", fontweight='bold')
+        plt.tight_layout()
+        plt.savefig(join(output_path, f"{output_path.split('/')[-2]}_{idx_query:02}.png"))
+        plt.close()
+
+
 def inference_saved_model(loader, folder_path, model, list_classes, n_images, n_mc_samples, output_root, device) -> None:
     """ Function to perform inference on a saved model.
         - Inference of image samples
@@ -521,8 +606,16 @@ def inference_saved_model(loader, folder_path, model, list_classes, n_images, n_
     os.makedirs(next_folder)
     os.makedirs(join(next_folder, "inference"))
     os.makedirs(join(next_folder, "MC_dropout"))
+    os.makedirs(join(next_folder, "CAMs"))
 
     model.eval()                        # Ensure that the model is in evaluation mode
+
+    generate_CAMs(folder_path=folder_path,
+                  model=model,
+                  list_classes=list_classes,
+                  n_images=n_images,
+                  output_path=join(next_folder, "CAMs"),
+                  device=device)
 
     pred_fn(folder_path=folder_path,
             model=model,
