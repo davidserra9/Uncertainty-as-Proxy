@@ -6,12 +6,14 @@ import seaborn as sns
 import random
 import torch
 import torch.nn as nn
+import torchvision.models as models
 from os.path import join
 from sklearn.metrics import f1_score
 from tqdm import tqdm
 import matplotlib.pyplot as plt
 import torch.nn.functional as F
 from glob import glob
+from efficientnet_pytorch import EfficientNet
 from sklearn.metrics import confusion_matrix
 from albumentations.pytorch import ToTensorV2
 
@@ -36,17 +38,31 @@ def initialize_model(model_name, num_classes, load_model, balance, data_aug, mod
         model : object
     """
 
-    # Initialize the desired architecture and change the last linear layer to fit the number of classes
-    if 'resnet' in model_name:
-        model = torch.hub.load('pytorch/vision:v0.8.0', model_name, pretrained=True)
-        num_ftrs = model.fc.in_features
-        model.fc = nn.Linear(num_ftrs, num_classes)
-        model.name = model_name
-        # Delete
-        model.fc.register_forward_hook(lambda m, inp, out: F.dropout(out, p=0.5, training=m.training))
+    IMP_ARCH = ['resnet18', 'resnet34', 'resnet50', 'resnet101', 'resnet152',
+                'efficientnet_b0', 'efficientnet_b1', 'efficientnet_b2', 'efficientnet_b3', 'efficientnet_b4',
+                'efficientnet_b5', 'efficientnet_b6', 'efficientnet_b7']
 
-    else:
-        raise Exception('Wrong model name: {}'.format(model_name))
+    try:
+        if model_name in IMP_ARCH:
+            model = getattr(models, model_name)(pretrained=load_model)
+            if 'resnet' in model_name:
+                num_ftrs = model.fc.in_features
+                model.fc = nn.Linear(num_ftrs, num_classes)
+                model.name = model_name
+
+            elif 'efficientnet' in model_name:
+                num_ftrs = model.classifier[1].in_features
+                model.classifier[1] = nn.Linear(num_ftrs, num_classes)
+                model.name = model_name
+
+        else:
+            raise ValueError('Model not implemented')
+
+    except Exception as e:
+        print(e)
+        print(f'Model {model_name} not found. Please check the model name or torchvision version.')
+        print(f"Models implemented:\nResNet18/34/50/101/152\nEfficientNet_b0-7")
+        exit()
 
     # If load_model==True, load the weights of the model
     if load_model:
@@ -405,6 +421,21 @@ def enable_dropout(model) -> None:
         if m.__class__.__name__.startswith('Dropout'):
             m.train()
 
+def fix_dropout(model) -> None:
+    """ Function to add dropout if needed and put dropout layers in train mode
+
+        Parameters
+        ----------
+        model : object
+            pytorch model to add dropout and put dropout layers in train mode
+    """
+
+    if 'resnet' in model.name:
+        append_dropout(model, rate=0.5)
+        enable_dropout(model)
+    elif 'efficientnet' in model.name:
+        enable_dropout(model)
+
 def get_monte_carlo_predictions(folder_path, forward_passes, model, list_classes, n_images, output_path, device) -> None:
     """ Function to get the MonteCarlo samples and Uncertainty Estimates
         through multiple forward passes
@@ -428,9 +459,8 @@ def get_monte_carlo_predictions(folder_path, forward_passes, model, list_classes
             'cuda' or 'cpu'
     """
 
-    model.eval()                        # Ensure that the model is in evaluation mode
-    append_dropout(model)               # Append the dropout layers
-    enable_dropout(model)               # Enable the dropout layers (train mode)
+    model.eval()
+    fix_dropout(model)                  # Ensure that the model is in evaluation mode
     model.to(device)
 
     dropout_predictions = np.empty((0, n_images, len(list_classes)))
@@ -491,13 +521,24 @@ def get_monte_carlo_predictions(folder_path, forward_passes, model, list_classes
 def return_CAM(feature_conv, weight_softmax, class_idx):
     size_upsample = (256, 256)
     bz, nc, h, w = feature_conv.shape
-    output_cam = []
     cam = weight_softmax[class_idx].dot(feature_conv.reshape((nc, h * w)))
     cam = cam.reshape(h, w)
     cam = cam - np.min(cam)
     cam_img = cam / np.max(cam)
     cam_img = np.uint8(255*cam_img)
     return cv2.resize(cam_img, size_upsample)
+
+def register_CAM_hooks(model):
+
+    feature_blobs = []
+    def hook_feature(module, input, output):
+        feature_blobs.append(output.data.cpu().numpy())
+
+    if 'resnet' in model.name:
+        model._modules.get('layer4').register_forward_hook(hook_feature)
+    elif 'efficientnet' in model.name:
+        model._modules.get('avgpool').register_forward_hook(hook_feature)
+    return feature_blobs
 
 def generate_CAMs(folder_path, model, list_classes, n_images, output_path, device) -> None:
     """ Function to generate the CAMs for the images in the folder_path
@@ -534,11 +575,7 @@ def generate_CAMs(folder_path, model, list_classes, n_images, output_path, devic
         ToTensorV2()
     ])
 
-    def hook_feature(module, input, output):
-        feature_blobs.append(output.data.cpu().numpy())
-
-    # For ResNet18
-    model._modules.get('layer4').register_forward_hook(hook_feature)
+    feature_globs = register_CAM_hooks(model)
 
     params = list(model.parameters())
     weight_softmax = params[-2].data.cpu().numpy()
@@ -555,7 +592,7 @@ def generate_CAMs(folder_path, model, list_classes, n_images, output_path, devic
             outputs = model(transformations(image=image)["image"].unsqueeze(0).to(device))
             probs = F.softmax(outputs, dim=1).data.squeeze()
             class_idx = torch.argmax(probs).item()
-            CAM = return_CAM(feature_blobs[-1], weight_softmax, class_idx)
+            CAM = return_CAM(feature_globs[-1], weight_softmax, class_idx)
 
             heatmap = cv2.applyColorMap(cv2.resize(CAM, (image.shape[1], image.shape[0])), cv2.COLORMAP_JET)[:,:,::-1]
             result = heatmap * 0.4 + image * 0.9

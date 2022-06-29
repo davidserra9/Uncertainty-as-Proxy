@@ -31,7 +31,7 @@ if __name__ == "__main__":
                                  pin_memory=True)
 
     print("")
-    print("----------- MODEL: {} --------------".format(model.__class__.__name__))
+    print("----------- MODEL: {} --------------".format(model.name))
     print("----------- INFERENCE START --------------")
     print("")
 
