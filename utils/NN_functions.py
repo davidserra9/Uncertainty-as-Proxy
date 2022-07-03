@@ -13,7 +13,6 @@ from tqdm import tqdm
 import matplotlib.pyplot as plt
 import torch.nn.functional as F
 from glob import glob
-from efficientnet_pytorch import EfficientNet
 from sklearn.metrics import confusion_matrix
 from albumentations.pytorch import ToTensorV2
 
