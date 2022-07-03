@@ -49,17 +49,13 @@ def main():
     scaler = torch.cuda.amp.GradScaler()                                # Initialize the Scaler
 
     # Initialize datasets
-    train_dataset = UWDataset(split_list=[join(cfg.species_dataset, f"split_{idx}") for idx in cfg.species_classification.train_splits],
-                              cfg=cfg,
-                              set="train",
-                              balance=cfg.species_classification.balance,
-                              data_aug=cfg.species_classification.data_aug)
+    train_dataset = UWDataset(split_list=[join(cfg.species_dataset, "train_images")],
+                              list_classes=cfg.species,
+                              train=True)
 
-    test_dataset = UWDataset(split_list=[join(cfg.species_dataset, f"split_{idx}") for idx in cfg.species_classification.test_splits],
-                             cfg=cfg,
-                             set="test",
-                             balance="",
-                             data_aug=False)
+    test_dataset = UWDataset(split_list=[join(cfg.species_dataset, "test_images")],
+                             list_classes=cfg.species,
+                             train=False)
 
     # Initialize dataloaders
     train_loader = DataLoader(train_dataset,

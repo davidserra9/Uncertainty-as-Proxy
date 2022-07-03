@@ -2,6 +2,7 @@ import cv2
 import json
 import torch
 import random
+import pandas as pd
 import collections
 import albumentations as A
 from glob import glob
@@ -14,195 +15,78 @@ from utils.config_parser import load_yml
 class UWDataset(Dataset):
     """ Custom dataset class for loading images and labels from a list of directories divided in splits """
 
-    def __init__(self, split_list, cfg, set, balance="", data_aug=False):
+    def __init__(self, split_list, list_classes, train):
         """ Initialize the dataset object. To initialize it, the function creates a list of dictionaries with the path
-            of the image and its label.
+            of the image and its label. This object implements oversampling and data augmentation if the the set is for
+            training. However, if the set is for testing, the function only loads the images and labels.
 
             Parameters
             ----------
             split_list : list
-                List of paths to the splits.
-            cfg : dict or Box object
-                Configuration dictionary.
-            set : str
-                train or test.
-            balance : str
-                oversampling, undersampling or other
-            data_aug : bool
-                Whether to apply data augmentation or not.
+                List of folder paths in which the images are.
+            list_classes : list
+                List of the names of the classes.
+            train : bool
+                If True, the dataset is for training. If False, the dataset is for testing. When train is True, the
+                dataset is oversampled and data augmentation is applied.
         """
 
-        self.set = set          # Save the set
-        self.cfg = cfg          # Save the config file
-        self.annotations = []   # Annotations paths and labels
-        random.seed(42)         # To have always the same dataset and emulate results
+        self.annotations = []
+        self.transforms = None
+        self.train = train
+        self.list_classes = list_classes
 
-        # The parameter set is used to differ between when there is only one image per annotation or more. If the
-        # set == "train" the annotations will be stored in a list of dictionaries with the image path and its label. As
-        # it can be seen:
-        # [{'image_path': 'path/to/image/Ceriantus_1.jpg', 'label': 'Ceriantus'},
-        #  {'image_path': 'path/to/image/Ceriantus_2.jpg', 'label': 'Ceriantus'},
-        #  {'image_path': 'path/to/image/Echinaster sepositus_1.jpg', 'label': 'Echinaster sepositus'},
-        #  ...]
-        # However, when there is more than one frame per annotations e.g. 1 second before, 1 second after and right on
-        # the time instant, the parameter set must be set to "test". The annotations will be saved in a list of
-        # dictionaries with a list of the image paths and the label. As follows:
-        # [{'image_path': ['path/to/image/Ceriantus_1a.jpg',
-        #                  'path/to/image/Ceriantus_1b.jpg',
-        #                  'path/to/image/Ceriantus_1c.jpg'],
-        #   'label': 'Ceriantus'},
-        #  {'image_path': ['path/to/image/Ceriantus_2a.jpg',
-        #                  'path/to/image/Ceriantus_2b.jpg',
-        #                  'path/to/image/Ceriantus_2c.jpg'],
-        #   'label': 'Ceriantus'},
-        #  {'image_path': ['path/to/image/Echinaster sepositus_1a.jpg',
-        #                  'path/to/image/Echinaster sepositus_1b.jpg',
-        #                  'path/to/image/Echinaster sepositus_1c.jpg'],
-        #   'label': 'Echinaster sepositus'},
-        #   ...]
+        annot = {}
+        # Find the excels on the split paths
+        for split in split_list:
+            # Obtain all the annotation files inside the split
+            annotation_files = glob(join(split, "*.ods"))
 
-        # If balanced == undersampling, the annotations will be balanced by removing samples from the majority classes.
-        # In other words, each specie will have the same number of appearances (the least appearance object). For the
-        # classes with higher occurrence, the samples are taken randomly.
+            # If there are more than one Excel file, throw an exception
+            try:
+                if len(annotation_files) > 1:
+                    raise Exception("There are more than one annotation excel on the folder:\n{}".format(split))
+                if len(annotation_files) == 0:
+                    raise Exception("There are no annotation excel on the folder:\n{}".format(split))
+            except Exception as e:
+                print(e)
+                exit()
 
-        # If balanced == oversampling, the annotations will be balanced by repeating the samples from the minority
-        # classes.
+            # Read the Excel file and create a dictionary with the labels as keys and a list of images and one-hot
+            # labels as values
+            df = pd.read_csv(annotation_files[0])
+            for index, row in df.iterrows():
+                label = row['annotation']
+                if label not in annot:
+                    annot[label] = []
+                annot[label].append({'image_root': join(split, f"{row['id_rov']:02d}_{row['img_id']:04d}"),
+                                     'one-hot': row[list_classes].to_list()})
 
-        # If balanced is neither undersampling or undersampling the dataset will keep its proportions
-        if balance == "undersampling":
+        if train:
+            # Implement the oversampling, repeat the less-majority classes
+            max_repeats = max([len(annot_list) for annot_list in annot.values()])
 
-            # Obtain all the labels of the corresponding images
-            img_labels = [path.split('/')[-1].split('_')[0]
-                          for split in split_list for path in glob(join(split, '*.jpg'))
-                          if path.split('/')[-1].split('_')[0] in cfg.species]
+            for label, annot_list in annot.items():
+                random.shuffle(annot_list)
+                rep = max_repeats // len(annot_list)
+                rem = max_repeats % len(annot_list)
 
-            # Create a dictionary with key = specie and value = empty list
-            repeated_labels = {}
-            for label in collections.Counter(img_labels):
-                repeated_labels[label] = []
+                for i in range(rep):
+                    for annot_dict in annot_list:
+                        same_annot = sorted(glob(annot_dict['image_root'] + "*"))
+                        for path in same_annot:
+                            self.annotations.append({'image_path': path,
+                                                     'label': label,
+                                                     'one-hot': annot_dict['one-hot']})
 
-            if set == "train":
-                # Append all the image paths to the corresponding key (label) (full path)
-                for split in split_list:
-                    for path in glob(join(split, '*.jpg')):
-                        if path.split('/')[-1].split('_')[0] in cfg.species:
-                            repeated_labels[path.split('/')[-1].split('_')[0]].append(path)
+                for annot_dict in annot_list[:rem]:
+                    same_annot = sorted(glob(annot_dict['image_root'] + "*"))
+                    for path in same_annot:
+                        self.annotations.append({'image_path': path,
+                                                 'label': label,
+                                                 'one-hot': annot_dict['one-hot']})
 
-                # Obtain the minimum number of appearances of a class
-                min_repeats = min([len(paths) for paths in repeated_labels.values()])
-
-                # Join all the annotations in the same list maintaining the undersampling proportions
-                for label, path_list in repeated_labels.items():
-                    random.shuffle(path_list)
-                    for path in path_list[:min_repeats]:
-                        self.annotations.append({'image_path': path, 'label': label})
-
-            else:
-                # Append all the image root to the corresponding key (label) (".../Bonellia viridis0000")
-                for split in split_list:
-                    for path in glob(join(split, '*.jpg')):
-                        if (path.split('/')[-1].split('_')[0] in cfg.species) and (path.split('.')[0][:-1] not in repeated_labels[path.split('/')[-1].split('_')[0]]):
-                            repeated_labels[path.split('/')[-1].split('_')[0]].append(path.split('.')[0][:-1])
-
-                # Obtain the minimum number of appearances of a class
-                min_repeats = min([len(paths) for paths in repeated_labels.values()])
-
-                # Join all the set of images to the same list
-                for label, path_list in repeated_labels.items():
-                    random.shuffle(path_list)
-                    for annot_root in path_list[:min_repeats]:
-                        same_annot_path = sorted(glob(annot_root + '*'))
-                        self.annotations.append({'image_path': same_annot_path, 'label': label})
-
-        elif balance == "oversampling":
-            # Obtain all the labels of the corresponding images
-            img_labels = [path.split('/')[-1].split('_')[0]
-                          for split in split_list for path in glob(join(split, '*.jpg'))
-                          if path.split('/')[-1].split('_')[0] in cfg.species]
-
-            # Create a dictionary with key = specie and value = empty list
-            repeated_labels = {}
-            for label in collections.Counter(img_labels):
-                repeated_labels[label] = []
-
-            # Find the number of annotations per specie.
-            if set == "train":
-                for split in split_list:
-                    for path in glob(join(split, '*.jpg')):
-                        if path.split('/')[-1].split('_')[0] in cfg.species:
-                            repeated_labels[path.split('/')[-1].split('_')[0]].append(path)
-
-                # Obtain the minimum number of appearances of a class
-                max_repeats = max([len(paths) for paths in repeated_labels.values()])
-
-                for label, path_list in repeated_labels.items():
-                    random.shuffle(path_list)
-                    repetitions = max_repeats // len(path_list)
-                    remainder = max_repeats % len(path_list)
-                    for i in range(repetitions):
-                        for path in path_list:
-                            self.annotations.append({'image_path': path, 'label': label})
-
-                    for path in path_list[:remainder]:
-                        self.annotations.append({'image_path': path, 'label': label})
-
-            else:
-                for split in split_list:
-                    for path in glob(join(split, '*.jpg')):
-                        if (path.split('/')[-1].split('_')[0] in cfg.species) and (path.split('.')[0][:-1] not in repeated_labels[path.split('/')[-1].split('_')[0]]):
-                            repeated_labels[path.split('/')[-1].split('_')[0]].append(path.split('.')[0][:-1])
-
-                # Obtain the minimum number of appearances of a class
-                max_repeats = max([len(paths) for paths in repeated_labels.values()])
-
-                for label, path_list in repeated_labels.items():
-                    random.shuffle(path_list)
-                    repetitions = max_repeats // len(path_list)
-                    remainder = max_repeats % len(path_list)
-                    for i in range(repetitions):
-                        for annot_root in path_list:
-                            same_annot_path = sorted(glob(annot_root + '*'))
-                            self.annotations.append({'image_path': same_annot_path, 'label': label})
-
-                    for annot_root in path_list[:remainder]:
-                        same_annot_path = sorted(glob(annot_root + '*'))
-                        self.annotations.append({'image_path': same_annot_path, 'label': label})
-
-        else:
-            if set == "train":
-                self.annotations = [{'image_path': path, 'label': path.split('/')[-1].split('_')[0]}
-                                    for split in split_list for path in glob(join(split, '*.jpg'))
-                                    if path.split('/')[-1].split('_')[0] in cfg.species]
-
-            else:
-                # Obtain all the labels of the corresponding images
-                img_labels = [path.split('/')[-1].split('_')[0]
-                              for split in split_list for path in glob(join(split, '*.jpg'))
-                              if path.split('/')[-1].split('_')[0] in cfg.species]
-
-                # Create a dictionary with key = specie and value = empty list
-                repeated_labels = {}
-                for label in collections.Counter(img_labels):
-                    repeated_labels[label] = []
-
-                for split in split_list:
-                    for path in glob(join(split, '*.jpg')):
-                        if (path.split('/')[-1].split('_')[0] in cfg.species) and (path.split('.')[0][:-1] not in repeated_labels[path.split('/')[-1].split('_')[0]]):
-                            repeated_labels[path.split('/')[-1].split('_')[0]].append(path.split('.')[0][:-1])
-
-                for label, path_list in repeated_labels.items():
-                    for annot_root in path_list:
-                        same_annot_path = sorted(glob(annot_root + '*'))
-                        self.annotations.append({'image_path': same_annot_path, 'label': label})
-
-        # Show the number of classes and the number of images per class
-        print(f'\nNumber of classes from splits: {[x[-1] for x in split_list]}')
-        print(f"{len(self.annotations[0]['image_path']) if type(self.annotations[0]['image_path']) == type([]) else 1} frames per annotation")
-        for label in cfg.species:
-            print('\t', label, len([x for x in self.annotations if x['label'] == label]))
-
-        if data_aug:
-            self.transform = A.Compose([
+            self.transforms = A.Compose([
                 A.GaussNoise(p=0.2),
                 A.OneOf([
                     A.MotionBlur(p=0.2),
@@ -221,12 +105,25 @@ class UWDataset(Dataset):
             ])
 
         else:
-            self.transform = A.Compose([
+            for label, annot_list in annot.items():
+                for annot_dict in annot_list:
+                    self.annotations.append({'image_path': sorted(glob(annot_dict['image_root'] + "*")),
+                                             'label': label,
+                                             'one-hot': annot_dict['one-hot']})
+
+            self.transforms = A.Compose([
                 A.Resize(224, 224),
                 A.Normalize(mean=[0.4493, 0.5078, 0.4237],
                             std=[0.1263, 0.1265, 0.1169]),
                 ToTensorV2()
             ])
+
+        # Show the number of classes and the number of images per class
+        print(f'\nNumber of classes from splits: {[x.split("/")[-1] for x in split_list]}')
+        print(f"{len(self.annotations[0]['image_path']) if type(self.annotations[0]['image_path']) == type([]) else 1} frames per annotation")
+        for label in list_classes:
+            print('\t', label, len([x for x in self.annotations if x['label'] == label]))
+
 
     def __len__(self) -> int:
         """ Length of the dataset. """
@@ -236,26 +133,26 @@ class UWDataset(Dataset):
     def __getitem__(self, index):
         """ Get the item at the given index. """
 
-        if self.set == "train":
+        if self.train:
             # Read image and transform it
             img = cv2.imread(self.annotations[index]['image_path'])[:,:,::-1]
-            img = self.transform(image=img)['image']
+            img = self.transforms(image=img)['image']
 
             # Obtain the label and encode them
             label = self.annotations[index]['label']
-            label = self.cfg.species.index(label)
+            label = self.list_classes.index(label)
 
             return img, torch.tensor(label)
 
         else:
             # Read images and transform them
             image_paths = self.annotations[index]['image_path']
-            images = [self.transform(image=cv2.imread(path)[:,:,::-1])['image'] for path in image_paths]
+            images = [self.transforms(image=cv2.imread(path)[:,:,::-1])['image'] for path in image_paths]
             images = torch.stack(images)
 
             # Obtain the label and encode them
             label = self.annotations[index]['label']
-            label = self.cfg.species.index(label)
+            label = self.list_classes.index(label)
 
             return images, torch.tensor(label)
 
@@ -264,8 +161,7 @@ if __name__ == "__main__":
     cfg = load_yml(path="../config.yml")
 
     train_dataset = UWDataset(
-        split_list=[join(cfg.species_dataset, f"split_{idx}") for idx in cfg.species_classification.train_splits],
-        cfg=cfg,
-        set="train",
-        balance=cfg.species_classification.balance,
-        data_aug=True)
+        split_list=[join(cfg.excels_path, "test_images")],
+        list_classes=cfg.species,
+        train=False)
+
