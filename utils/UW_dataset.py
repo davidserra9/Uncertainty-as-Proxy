@@ -12,6 +12,7 @@ from albumentations.pytorch import ToTensorV2
 from torchvision import transforms as transforms
 from utils.config_parser import load_yml
 
+
 class UWDataset(Dataset):
     """ Custom dataset class for loading images and labels from a list of directories divided in splits """
 
@@ -57,10 +58,12 @@ class UWDataset(Dataset):
             df = pd.read_csv(annotation_files[0])
             for index, row in df.iterrows():
                 label = row['annotation']
-                if label not in annot:
-                    annot[label] = []
-                annot[label].append({'image_root': join(split, f"{row['id_rov']:02d}_{row['img_id']:04d}"),
-                                     'one-hot': row[list_classes].to_list()})
+
+                if row[list_classes].to_list().count(1) == 1:
+                    if label not in annot:
+                        annot[label] = []
+                    annot[label].append({'image_root': join(split, f"{row['id_rov']:02d}_{row['img_id']:04d}"),
+                                         'one-hot': row[list_classes].to_list()})
 
         if train:
             # Implement the oversampling, repeat the less-majority classes
@@ -73,18 +76,24 @@ class UWDataset(Dataset):
 
                 for i in range(rep):
                     for annot_dict in annot_list:
-                        same_annot = sorted(glob(annot_dict['image_root'] + "*"))
-                        for path in same_annot:
-                            self.annotations.append({'image_path': path,
-                                                     'label': label,
-                                                     'one-hot': annot_dict['one-hot']})
-
-                for annot_dict in annot_list[:rem]:
-                    same_annot = sorted(glob(annot_dict['image_root'] + "*"))
-                    for path in same_annot:
-                        self.annotations.append({'image_path': path,
+                        # same_annot = sorted(glob(annot_dict['image_root'] + "*"))
+                        # for path in same_annot:
+                        #     self.annotations.append({'image_path': path,
+                        #                              'label': label,
+                        #                              'one-hot': annot_dict['one-hot']})
+                        self.annotations.append({'image_path': annot_dict['image_root'] + "_c.jpg",
                                                  'label': label,
                                                  'one-hot': annot_dict['one-hot']})
+
+                for annot_dict in annot_list[:rem]:
+                    # same_annot = sorted(glob(annot_dict['image_root'] + "*"))
+                    # for path in same_annot:
+                    #     self.annotations.append({'image_path': path,
+                    #                              'label': label,
+                    #                              'one-hot': annot_dict['one-hot']})
+                    self.annotations.append({'image_path': annot_dict['image_root'] + "_c.jpg",
+                                             'label': label,
+                                             'one-hot': annot_dict['one-hot']})
 
             self.transforms = A.Compose([
                 A.GaussNoise(p=0.2),
@@ -120,10 +129,10 @@ class UWDataset(Dataset):
 
         # Show the number of classes and the number of images per class
         print(f'\nNumber of classes from splits: {[x.split("/")[-1] for x in split_list]}')
-        print(f"{len(self.annotations[0]['image_path']) if type(self.annotations[0]['image_path']) == type([]) else 1} frames per annotation")
+        print(
+            f"{len(self.annotations[0]['image_path']) if type(self.annotations[0]['image_path']) == type([]) else 1} frames per annotation")
         for label in list_classes:
             print('\t', label, len([x for x in self.annotations if x['label'] == label]))
-
 
     def __len__(self) -> int:
         """ Length of the dataset. """
@@ -135,7 +144,7 @@ class UWDataset(Dataset):
 
         if self.train:
             # Read image and transform it
-            img = cv2.imread(self.annotations[index]['image_path'])[:,:,::-1]
+            img = cv2.imread(self.annotations[index]['image_path'])[:, :, ::-1]
             img = self.transforms(image=img)['image']
 
             # Obtain the label and encode them
@@ -147,7 +156,7 @@ class UWDataset(Dataset):
         else:
             # Read images and transform them
             image_paths = self.annotations[index]['image_path']
-            images = [self.transforms(image=cv2.imread(path)[:,:,::-1])['image'] for path in image_paths]
+            images = [self.transforms(image=cv2.imread(path)[:, :, ::-1])['image'] for path in image_paths]
             images = torch.stack(images)
 
             # Obtain the label and encode them
@@ -156,12 +165,11 @@ class UWDataset(Dataset):
 
             return images, torch.tensor(label)
 
-if __name__ == "__main__":
 
+if __name__ == "__main__":
     cfg = load_yml(path="../config.yml")
 
     train_dataset = UWDataset(
         split_list=[join(cfg.excels_path, "test_images")],
         list_classes=cfg.species,
         train=False)
-

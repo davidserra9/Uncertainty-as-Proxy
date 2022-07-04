@@ -600,7 +600,7 @@ def generate_CAMs(folder_path, model, list_classes, n_images, output_path, devic
             plt.imshow(result / np.max(result))
             plt.axis('off')
 
-        plt.suptitle(f"Ground Truth: {lst_paths[0].split('/')[-1].split('_')[0]}", fontweight='bold')
+        plt.suptitle(f"Ground Truth: {lst_paths[0].split('/')[-1]}", fontweight='bold')
         plt.tight_layout()
         plt.savefig(join(output_path, f"{output_path.split('/')[-2]}_{idx_query:02}.png"))
         plt.close()

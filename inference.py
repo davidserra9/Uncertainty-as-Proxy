@@ -19,16 +19,15 @@ if __name__ == "__main__":
                              model_root=cfg.model_path)
     model.to(DEVICE)
 
-    test_dataset = UWDataset(split_list=[join(cfg.species_dataset, f"split_{idx}") for idx in cfg.species_classification.test_splits],
-                                 cfg=cfg,
-                                 set="test",
-                                 balance="",
-                                 data_aug=False)
+    # Initialize datasets
+    test_dataset = UWDataset(split_list=[join(cfg.species_dataset, "test_images")],
+                             list_classes=cfg.species,
+                             train=False)
 
     test_loader = DataLoader(test_dataset,
-                                 batch_size=cfg.species_classification.batch_size,
-                                 num_workers=cfg.species_classification.num_workers,
-                                 pin_memory=True)
+                             batch_size=cfg.species_classification.batch_size,
+                             num_workers=cfg.species_classification.num_workers,
+                             pin_memory=True)
 
     print("")
     print("----------- MODEL: {} --------------".format(model.name))
@@ -36,7 +35,7 @@ if __name__ == "__main__":
     print("")
 
     inference_saved_model(loader=test_loader,
-                          folder_path=join(cfg.species_dataset, f"split_{cfg.species_classification.test_splits[0]}"),
+                          folder_path=join(cfg.species_dataset, "test_images"),
                           model=model,
                           list_classes=cfg.species,
                           n_images=50,
