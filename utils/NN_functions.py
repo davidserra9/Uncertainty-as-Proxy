@@ -1,6 +1,7 @@
 import os
 import albumentations as A
 import cv2
+import pandas as pd
 import numpy as np
 import seaborn as sns
 import random
@@ -439,7 +440,6 @@ def get_monte_carlo_predictions(folder_path, forward_passes, model, list_classes
     """ Function to get the MonteCarlo samples and Uncertainty Estimates
         through multiple forward passes
         (https://stackoverflow.com/a/63397197/15098668)
-
         Parameters
         ----------
         folder_path : str
@@ -541,7 +541,6 @@ def register_CAM_hooks(model):
 
 def generate_CAMs(folder_path, model, list_classes, n_images, output_path, device) -> None:
     """ Function to generate the CAMs for the images in the folder_path
-
         Parameters
         ----------
         folder_path : str
@@ -605,8 +604,99 @@ def generate_CAMs(folder_path, model, list_classes, n_images, output_path, devic
         plt.savefig(join(output_path, f"{output_path.split('/')[-2]}_{idx_query:02}.png"))
         plt.close()
 
-
 def inference_saved_model(loader, folder_path, model, list_classes, n_images, n_mc_samples, output_root, device) -> None:
+    random.seed(42)
+
+    # Create the folder in which the output files will be saved
+    os.makedirs(output_root, exist_ok=True)
+    next_folder = len(os.listdir(output_root)) + 1
+    next_folder = join(output_root, f"inf{next_folder:02}")
+    os.makedirs(next_folder)
+
+    model.eval()            # Ensure that the model is in evaluation mode
+    fix_dropout(model)      # Dropout in train mode to generate the MC samples
+
+    # Chose the images to run inference on
+    df = pd.read_csv(glob(join(folder_path, "*.ods"))[0])
+    all_images = glob(join(folder_path, "*.jpg"))  # Get all the images in the folder
+    random.shuffle(all_images)  # Shuffle the image paths
+    query_images = all_images[:n_images]  # Get the first 20 images (randomly chosen)
+
+    # Find all the images of the same annotation
+    same_annot = [[r for r in sorted(all_images) if q[:-5] in r] for q in query_images]
+
+    transformations = A.Compose([
+                A.Resize(224, 224),
+                A.Normalize(mean=[0.4493, 0.5078, 0.4237],
+                            std=[0.1263, 0.1265, 0.1169]),
+                ToTensorV2()
+            ])
+
+    # --- CAMs and MC Dropout ---
+    feature_globs = register_CAM_hooks(model)
+    params = list(model.parameters())
+    weight_softmax = params[-2].data.cpu().numpy()
+    softmax = nn.Softmax(dim=1)
+
+    for idx_annot, list_paths in enumerate(tqdm(same_annot, desc="Inference")):
+        #feature_globs = []
+        same_annot_img = [cv2.imread(path)[:, :, ::-1] for path in list_paths]
+
+        num_img = len(same_annot_img)
+        figure, axes = plt.subplots(nrows=2, ncols=num_img, figsize=(20, 8))
+
+        # --- Generate CAMs ---
+        for idx, image in enumerate(same_annot_img):
+
+            outputs = model(transformations(image=image)["image"].unsqueeze(0).to(device))
+            probs = F.softmax(outputs, dim=1).data.squeeze()
+            class_idx = torch.argmax(probs).item()
+            CAM = return_CAM(feature_globs[-1], weight_softmax, class_idx)
+
+            heatmap = cv2.applyColorMap(cv2.resize(CAM, (image.shape[1], image.shape[0])), cv2.COLORMAP_JET)[:, :, ::-1]
+            result = heatmap * 0.4 + image * 0.9
+            axes[1, idx].imshow(result / np.max(result))
+            axes[1, idx].set_title(f"Pred: {list_classes[class_idx]}")
+            axes[1, idx].axis('off')
+
+        # --- Generate Uncertainty estimates ---
+        dropout_predictions = np.empty((0, num_img, len(list_classes)))
+
+        for idx_mc in range(n_mc_samples):
+            images = [transformations(image=cv2.imread(img_path)[:, :, ::-1])["image"] for img_path in list_paths]
+            images = torch.stack(images).to(device)
+
+            with torch.no_grad():
+                outputs = softmax(model(images))
+
+            dropout_predictions = np.vstack((dropout_predictions, outputs.cpu().numpy()[np.newaxis, :, :]))
+
+        mean = np.mean(dropout_predictions, axis=0)  # shape (n_samples, n_classes)
+        variance = np.var(dropout_predictions, axis=0)  # shape (n_samples, n_classes)
+
+        same_img = [cv2.imread(path)[:,:,::-1] for path in list_paths]
+        for idx_img, (image, m, v) in enumerate(zip(same_img, mean, variance)):
+            pred_idx = m.argmax()
+            axes[0, idx_img].imshow(image)
+            axes[0, idx_img].set_title(f"{list_classes[pred_idx]}\n{m[pred_idx]:.2f}-{v[pred_idx]:.4f}")
+            axes[0, idx_img].axis('off')
+
+        img_id = list_paths[0].split("/")[-1].split("_")[1]
+        plt.suptitle(
+            f"Filename: {list_paths[0].split('/')[-1]}\nGround Truth: {df.loc[df['img_id'] == int(img_id), 'annotation'].item()}",
+            fontweight='bold')
+
+        plt.tight_layout()
+        plt.savefig(join(next_folder, f"{idx_annot}.png"))
+        plt.close()
+
+    confusion_matrix_fn(loader=loader,
+                        model=model,
+                        list_classes=list_classes,
+                        output_path=next_folder,
+                        device=device)
+
+def inference_saved_model_old(loader, folder_path, model, list_classes, n_images, n_mc_samples, output_root, device) -> None:
     """ Function to perform inference on a saved model.
         - Inference of image samples
         - Confusion Matrix
@@ -646,6 +736,14 @@ def inference_saved_model(loader, folder_path, model, list_classes, n_images, n_
 
     model.eval()                        # Ensure that the model is in evaluation mode
 
+    get_monte_carlo_predictions(folder_path=folder_path,
+                                forward_passes=n_mc_samples,
+                                model=model,
+                                list_classes=list_classes,
+                                n_images=n_images,
+                                output_path=join(next_folder, "MC_dropout"),
+                                device=device)
+
     generate_CAMs(folder_path=folder_path,
                   model=model,
                   list_classes=list_classes,
@@ -666,13 +764,7 @@ def inference_saved_model(loader, folder_path, model, list_classes, n_images, n_
                         output_path=next_folder,
                         device=device)
 
-    get_monte_carlo_predictions(folder_path=folder_path,
-                                forward_passes=n_mc_samples,
-                                model=model,
-                                list_classes=list_classes,
-                                n_images=50,
-                                output_path=join(next_folder, "MC_dropout"),
-                                device=device)
+
 
 def save_model(model, optimizer, num_epoch, acc, f1, model_root, balance, data_aug):
     """ Function to save the model in the desired folder.

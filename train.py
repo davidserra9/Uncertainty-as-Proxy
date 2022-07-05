@@ -49,11 +49,13 @@ def main():
     scaler = torch.cuda.amp.GradScaler()                                # Initialize the Scaler
 
     # Initialize datasets
-    train_dataset = UWDataset(split_list=[join(cfg.species_dataset, "train_images")],
+    train_dataset = UWDataset(split_list=[join(cfg.excels_path, "train_images"),
+                                          join(cfg.excels_path, "val_images")],
                               list_classes=cfg.species,
-                              train=True)
+                              train=True,
+                              img_per_annot=cfg.species_classification.img_per_annot)
 
-    test_dataset = UWDataset(split_list=[join(cfg.species_dataset, "test_images")],
+    test_dataset = UWDataset(split_list=[join(cfg.excels_path, "test_images")],
                              list_classes=cfg.species,
                              train=False)
 
@@ -122,7 +124,7 @@ def main():
     model.to(DEVICE)
 
     inference_saved_model(loader=test_loader,
-                          folder_path=join(cfg.species_dataset, f"split_{cfg.species_classification.test_splits[0]}"),
+                          folder_path=join(cfg.excels_path, "test_images"),
                           model=model,
                           list_classes=cfg.species,
                           n_images=50,

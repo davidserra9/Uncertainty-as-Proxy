@@ -20,7 +20,7 @@ if __name__ == "__main__":
     model.to(DEVICE)
 
     # Initialize datasets
-    test_dataset = UWDataset(split_list=[join(cfg.species_dataset, "test_images")],
+    test_dataset = UWDataset(split_list=[join(cfg.excels_path, "test_images")],
                              list_classes=cfg.species,
                              train=False)
 
@@ -35,7 +35,7 @@ if __name__ == "__main__":
     print("")
 
     inference_saved_model(loader=test_loader,
-                          folder_path=join(cfg.species_dataset, "test_images"),
+                          folder_path=join(cfg.excels_path, "test_images"),
                           model=model,
                           list_classes=cfg.species,
                           n_images=50,

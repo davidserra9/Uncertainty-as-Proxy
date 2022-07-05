@@ -7,6 +7,8 @@ import collections
 import albumentations as A
 from glob import glob
 from os.path import join
+
+from matplotlib import pyplot as plt
 from torch.utils.data import Dataset
 from albumentations.pytorch import ToTensorV2
 from torchvision import transforms as transforms
@@ -16,7 +18,7 @@ from utils.config_parser import load_yml
 class UWDataset(Dataset):
     """ Custom dataset class for loading images and labels from a list of directories divided in splits """
 
-    def __init__(self, split_list, list_classes, train):
+    def __init__(self, split_list, list_classes, train, img_per_annot=3):
         """ Initialize the dataset object. To initialize it, the function creates a list of dictionaries with the path
             of the image and its label. This object implements oversampling and data augmentation if the the set is for
             training. However, if the set is for testing, the function only loads the images and labels.
@@ -27,6 +29,8 @@ class UWDataset(Dataset):
                 List of folder paths in which the images are.
             list_classes : list
                 List of the names of the classes.
+            img_per_annot : int
+                Number of images per annotation. 1, 3(+-0.5s) or 5(+-1s and +-0.5s).
             train : bool
                 If True, the dataset is for training. If False, the dataset is for testing. When train is True, the
                 dataset is oversampled and data augmentation is applied.
@@ -59,11 +63,11 @@ class UWDataset(Dataset):
             for index, row in df.iterrows():
                 label = row['annotation']
 
-                if row[list_classes].to_list().count(1) == 1:
-                    if label not in annot:
-                        annot[label] = []
-                    annot[label].append({'image_root': join(split, f"{row['id_rov']:02d}_{row['img_id']:04d}"),
-                                         'one-hot': row[list_classes].to_list()})
+                # if row[list_classes].to_list().count(1) == 1:
+                if label not in annot:
+                    annot[label] = []
+                annot[label].append({'image_root': join(split, f"{row['id_rov']:02d}_{row['img_id']:04d}"),
+                                     'one-hot': row[list_classes].to_list()})
 
         if train:
             # Implement the oversampling, repeat the less-majority classes
@@ -76,24 +80,47 @@ class UWDataset(Dataset):
 
                 for i in range(rep):
                     for annot_dict in annot_list:
-                        # same_annot = sorted(glob(annot_dict['image_root'] + "*"))
-                        # for path in same_annot:
-                        #     self.annotations.append({'image_path': path,
-                        #                              'label': label,
-                        #                              'one-hot': annot_dict['one-hot']})
+                        if img_per_annot == 1:
+                            self.annotations.append({'image_path': annot_dict['image_root'] + "_c.jpg",
+                                                     'label': label,
+                                                     'one-hot': annot_dict['one-hot']})
+
+                        elif img_per_annot == 3:
+                            same_annot = sorted(glob(annot_dict['image_root'] + "*"))
+                            for path in same_annot[1:4]:
+                                self.annotations.append({'image_path': path,
+                                                         'label': label,
+                                                         'one-hot': annot_dict['one-hot']})
+
+                        elif img_per_annot == 5:
+                            same_annot = sorted(glob(annot_dict['image_root'] + "*"))
+                            for path in same_annot:
+                                self.annotations.append({'image_path': path,
+                                                         'label': label,
+                                                         'one-hot': annot_dict['one-hot']})
+
+                        else:
+                            raise Exception("img_per_annot must be 1, 3 or 5")
+
+                for annot_dict in annot_list[:rem]:
+                    if img_per_annot == 1:
                         self.annotations.append({'image_path': annot_dict['image_root'] + "_c.jpg",
                                                  'label': label,
                                                  'one-hot': annot_dict['one-hot']})
 
-                for annot_dict in annot_list[:rem]:
-                    # same_annot = sorted(glob(annot_dict['image_root'] + "*"))
-                    # for path in same_annot:
-                    #     self.annotations.append({'image_path': path,
-                    #                              'label': label,
-                    #                              'one-hot': annot_dict['one-hot']})
-                    self.annotations.append({'image_path': annot_dict['image_root'] + "_c.jpg",
-                                             'label': label,
-                                             'one-hot': annot_dict['one-hot']})
+                    elif img_per_annot == 3:
+                        same_annot = sorted(glob(annot_dict['image_root'] + "*"))
+                        for path in same_annot[1:4]:
+                            self.annotations.append({'image_path': path,
+                                                     'label': label,
+                                                     'one-hot': annot_dict['one-hot']})
+
+                    elif img_per_annot == 5:
+                        same_annot = sorted(glob(annot_dict['image_root'] + "*"))
+                        for path in same_annot:
+                            self.annotations.append({'image_path': path,
+                                                     'label': label,
+                                                     'one-hot': annot_dict['one-hot']})
 
             self.transforms = A.Compose([
                 A.GaussNoise(p=0.2),
