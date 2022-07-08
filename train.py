@@ -7,7 +7,7 @@ from os.path import join
 from torch.utils.data import DataLoader
 from utils.config_parser import load_yml
 from utils.UW_dataset import UWDataset
-from utils.NN_functions import initialize_model, train_fn, eval_fn, save_model, inference_saved_model
+from utils.NN_functions import initialize_model, train_fn, eval_fn, save_model, inference_saved_model, fix_dropout
 
 def main():
     """ Main function of the model (training and evaluation) """
@@ -49,8 +49,7 @@ def main():
     scaler = torch.cuda.amp.GradScaler()                                # Initialize the Scaler
 
     # Initialize datasets
-    train_dataset = UWDataset(split_list=[join(cfg.excels_path, "train_images"),
-                                          join(cfg.excels_path, "val_images")],
+    train_dataset = UWDataset(split_list=[join(cfg.excels_path, "train_images")],
                               list_classes=cfg.species,
                               train=True,
                               img_per_annot=cfg.species_classification.img_per_annot)
@@ -124,7 +123,7 @@ def main():
     model.to(DEVICE)
 
     inference_saved_model(loader=test_loader,
-                          folder_path=join(cfg.excels_path, "test_images"),
+                          folder_path=join(cfg.species_dataset, f"split_{4}"),
                           model=model,
                           list_classes=cfg.species,
                           n_images=50,

@@ -4,7 +4,7 @@ from utils.config_parser import load_yml
 from utils.UW_dataset import UWDataset
 from os.path import join
 import timeit
-from utils.NN_functions import initialize_model, inference_saved_model
+from utils.NN_functions import initialize_model, inference_saved_model, fix_dropout
 
 if __name__ == "__main__":
     cfg = load_yml("config.yml")
