@@ -7,7 +7,7 @@ from os.path import join
 from torch.utils.data import DataLoader
 from utils.config_parser import load_yml
 from utils.UW_dataset import UWDataset
-from utils.NN_functions import initialize_model, train_fn, eval_fn, save_model, inference_saved_model, fix_dropout
+from utils.NN_functions import initialize_model, train_fn, eval_fn, save_model, inference_saved_model, dropout_train
 
 def main():
     """ Main function of the model (training and evaluation) """
