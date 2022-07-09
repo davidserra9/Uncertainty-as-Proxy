@@ -3,8 +3,9 @@ from torch.utils.data import DataLoader
 from utils.config_parser import load_yml
 from utils.UW_dataset import UWDataset
 from os.path import join
+from glob import glob
 import timeit
-from utils.NN_functions import initialize_model, inference_saved_model, fix_dropout
+from utils.NN_functions import initialize_model, inference_saved_model, dropout_train
 
 if __name__ == "__main__":
     cfg = load_yml("config.yml")
@@ -14,8 +15,6 @@ if __name__ == "__main__":
     model = initialize_model(model_name=cfg.species_classification.model,
                              num_classes=len(cfg.species),
                              load_model=True,
-                             balance=cfg.species_classification.balance,
-                             data_aug=cfg.species_classification.data_aug,
                              model_root=cfg.model_path)
     model.to(DEVICE)
 
@@ -35,10 +34,10 @@ if __name__ == "__main__":
     print("")
 
     inference_saved_model(loader=test_loader,
-                          folder_path=join(cfg.excels_path, "test_images"),
+                          folder_path=join(cfg.species_dataset, "test_images"),
                           model=model,
                           list_classes=cfg.species,
-                          n_images=50,
-                          n_mc_samples=100,
+                          n_images=len(glob(join(cfg.species_dataset, "test_images", "*.jpg"))),
+                          n_mc_samples=25,
                           output_root=cfg.output_path,
                           device=DEVICE)

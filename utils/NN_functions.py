@@ -1,4 +1,5 @@
 import os
+import sys
 import albumentations as A
 import cv2
 import pandas as pd
@@ -14,10 +15,12 @@ from tqdm import tqdm
 import matplotlib.pyplot as plt
 import torch.nn.functional as F
 from glob import glob
+from beautifultable import BeautifulTable
 from sklearn.metrics import confusion_matrix
 from albumentations.pytorch import ToTensorV2
+from utils.reliability import *
 
-def initialize_model(model_name, num_classes, load_model, balance, data_aug, model_root):
+def initialize_model(model_name, num_classes, load_model, model_root):
     """ Function to initialize the model depending on the desired architecture.
 
         Parameters
@@ -28,10 +31,8 @@ def initialize_model(model_name, num_classes, load_model, balance, data_aug, mod
             number of classes to predict
         load_model : boolean
             if True, load the model from the disk
-        balance : string
-            when loading an existing model, undersampling, oversampling or other
-        data_aug : boolean
-            when loading an existing model, data augmentation when training or not
+        model_root : string
+            string of the folder/root path where the model will be saved
 
         Returns
         -------
@@ -66,25 +67,55 @@ def initialize_model(model_name, num_classes, load_model, balance, data_aug, mod
 
     # If load_model==True, load the weights of the model
     if load_model:
-        if balance in ["oversampling", "undersampling"]:
-            if data_aug:
-                model_path = join(model_root, "_".join([model_name, balance, "DA"]) + ".pth.tar")
-            else:
-                model_path = join(model_root, "_".join([model_name, balance]) + ".pth.tar")
-
-        else:
-            if data_aug:
-                model_path = join(model_root, "_".join([model_name, "DA"]) + ".pth.tar")
-            else:
-                model_path = join(model_root, model_name + ".pth.tar")
-
+        # Load the desired model
+        model_path = join(model_root, model_name + ".pth.tar")
         checkpoint = torch.load(model_path)
         model.load_state_dict(checkpoint['state_dict'])
         print('Model loaded from {}'.format(model_path))
+
+        # Print the model parameters
+        bt = BeautifulTable()
+        bt.columns.header = ["architecture", "epoch", "accuracy", "f1 score"]
+        bt.rows.append([model_name, checkpoint['epoch'], checkpoint['test_acc'], checkpoint['f1']])
+        print()
+        print(bt)
+
     else:
-        print('Model initialized')
+        print('Model initialized with weights from ImageNet')
 
     return model
+
+def save_model(model, optimizer, num_epoch, acc, f1, model_root):
+    """ Function to save the model in the desired folder.
+
+        Parameters
+        ----------
+        model : object
+            pytorch model
+        optimizer : object
+            pytorch optimizer
+        num_epoch : int
+            number of epochs trained on
+        acc : float
+            accuracy of the model
+        f1 : float
+            f1 score of the model
+        model_root : str
+            string of the folder/root path where the model will be saved
+    """
+
+    # Create the checkpoint dictionary
+    checkpoint = {
+        "state_dict": model.state_dict(),
+        "optimizer": optimizer.state_dict(),
+        "epoch": num_epoch,
+        "test_acc": acc,
+        "f1": f1
+    }
+
+    model_path = join(model_root, model.name + ".pth.tar")
+    torch.save(checkpoint, model_path)
+    print("Model saved in {}".format(model_path))
 
 def train_fn(loader, model, optimizer, loss_fn, scaler, device, epoch_num):
     """ Function to train the model with one epoch
@@ -227,64 +258,6 @@ def eval_fn(loader, model, loss_fn, device, epoch_num):
 
         return epoch_acc, epoch_loss, epoch_f1
 
-def pred_fn(folder_path, model, list_classes, n_images, output_path, device) -> None:
-    """ Function to run inference on some images of the test set
-
-        Parameters
-        ----------
-        folder_path : str
-            path to the folder containing the test images
-        model : object
-            pytorch model to run inference
-        list_classes : list
-            list of the names of the classes
-        n_images : int
-            number of images to run inference on (taken randomly)
-        output_path : str
-            path to the folder where the output files will be saved
-            (.../experiments/infxx/inference/)
-        device : str
-            'cuda' or 'cpu'
-    """
-
-    model.eval()                                    # ensure that the model is in eval mode
-
-    all_images = glob(join(folder_path, "*.jpg"))   # Get all the images in the folder
-    random.shuffle(all_images)                      # Shuffle the image paths
-    query_images = all_images[:n_images]            # Get the first 20 images (randomly chosen)
-
-    transformations = A.Compose([
-                A.Resize(224, 224),
-                A.Normalize(mean=[0.4493, 0.5078, 0.4237],
-                            std=[0.1263, 0.1265, 0.1169]),
-                ToTensorV2()
-            ])
-
-    for idx_query, im_path in enumerate(tqdm(query_images, desc="Running inference")):
-        same_annot = [cv2.imread(path)[:, :, ::-1] for path in sorted(all_images) if im_path[:-5] in path]
-
-        num_img = len(same_annot)
-        image_outputs = []
-        plt.figure(figsize=(20, 5))
-        for idx, image in enumerate(same_annot):
-            plt.subplot(1, num_img, idx+1)
-            plt.imshow(image)
-            plt.axis('off')
-
-            outputs = model(transformations(image=image)["image"].unsqueeze(0).to(device))
-            image_outputs.append(outputs)
-
-            _, predictions = torch.max(outputs.data, 1)
-            plt.title(f'Frame pred: {list_classes[predictions.item()]}')
-
-        mean_outputs = torch.mean(torch.stack(image_outputs), dim=0)
-        _, predictions = torch.max(mean_outputs.data, 1)
-        plt.suptitle(f"Ground Truth: {im_path.split('/')[-1].split('_')[0]}\nPred: {list_classes[predictions.item()]}",
-                     fontweight ="bold")
-        plt.tight_layout()
-        plt.savefig(join(output_path, f"{output_path.split('/')[-2]}_{idx_query:02}.png"))
-        plt.close()
-
 def confusion_matrix_fn(loader, model, list_classes, output_path, device) -> None:
     """ Function to compute and save the confusion matrix
 
@@ -405,7 +378,7 @@ def append_dropout(model, rate=0.2) -> None:
     for name, module in model.named_children():
         if len(list(module.children())) > 0:
             append_dropout(module)
-        if isinstance(module, nn.ReLU):
+        if name == 'layer4':
             new = nn.Sequential(module, nn.Dropout2d(p=rate, inplace=True))
             setattr(model, name, new)
 
@@ -435,6 +408,18 @@ def dropout_train(model) -> None:
         enable_dropout(model)
     elif 'efficientnet' in model.name:
         enable_dropout(model)
+
+def predictive_entropy(dropout_predictions):
+    """ Function to compute the predictive entropy of the network
+
+        Parameters
+        ----------
+        dropout_predictions : np.array
+    """
+    epsilon = sys.float_info.min
+    predictive_entropy = -np.sum(np.mean(dropout_predictions, axis=0) * np.log(np.mean(dropout_predictions, axis=0) + epsilon), axis=-1)
+
+    return predictive_entropy
 
 def return_CAM(feature_conv, weight_softmax, class_idx):
     size_upsample = (256, 256)
@@ -494,23 +479,24 @@ def inference_saved_model(loader, folder_path, model, list_classes, n_images, n_
 
     model.eval()
     model.to(device)
+
     confusion_matrix_fn(loader=loader,
                         model=model,
                         list_classes=list_classes,
                         output_path=next_folder,
                         device=device)
 
-    model.eval()            # Ensure that the model is in evaluation mode
-    dropout_train(model)      # Dropout in train mode to generate the MC samples
+    model.eval()                # Ensure that the model is in evaluation mode
+    dropout_train(model)        # Dropout in train mode to generate the MC samples
 
     # Chose the images to run inference on
     df = pd.read_csv(glob(join(folder_path, "*.ods"))[0])
     all_images = glob(join(folder_path, "*.jpg"))  # Get all the images in the folder
     random.shuffle(all_images)  # Shuffle the image paths
-    query_images = all_images[:n_images]  # Get the first 20 images (randomly chosen)
+    query_images = glob(join(folder_path, "*a.jpg"))[:n_images]  # Get the first 20 images (randomly chosen)
 
     # Find all the images of the same annotation
-    same_annot = [[r for r in sorted(all_images) if q[:-5] in r] for q in query_images]
+    same_annot = [[r for r in sorted(all_images) if q[:-6] in r] for q in query_images]
 
     transformations = A.Compose([
                 A.Resize(224, 224),
@@ -518,6 +504,10 @@ def inference_saved_model(loader, folder_path, model, list_classes, n_images, n_
                             std=[0.1263, 0.1265, 0.1169]),
                 ToTensorV2()
             ])
+    # --- Reliability diagram ---
+    y_true = []
+    y_pred = []
+    conf = []
 
     # --- CAMs and MC Dropout ---
     feature_globs = register_CAM_hooks(model)
@@ -560,6 +550,7 @@ def inference_saved_model(loader, folder_path, model, list_classes, n_images, n_
 
         mean = np.mean(dropout_predictions, axis=0)  # shape (n_samples, n_classes)
         variance = np.var(dropout_predictions, axis=0)  # shape (n_samples, n_classes)
+        # pred_entropy = predictive_entropy(dropout_predictions)
 
         same_img = [cv2.imread(path)[:,:,::-1] for path in list_paths]
         for idx_img, (image, m, v) in enumerate(zip(same_img, mean, variance)):
@@ -569,58 +560,31 @@ def inference_saved_model(loader, folder_path, model, list_classes, n_images, n_
             axes[0, idx_img].axis('off')
 
         img_id = list_paths[0].split("/")[-1].split("_")[1]
-
         plt.suptitle(
             f"Filename: {list_paths[0].split('/')[-1]}\nGround Truth: {df.loc[df['img_id'] == int(img_id), 'annotation'].item()}",
             fontweight='bold')
+
+        y_true.append(list_classes.index(df.loc[df['img_id'] == int(img_id), 'annotation'].item()))
+        y_pred.append(m.argmax())
+        conf.append(m.max())
 
         plt.tight_layout()
         plt.savefig(join(next_folder, f"{idx_annot}.png"))
         plt.close()
 
-def save_model(model, optimizer, num_epoch, acc, f1, model_root, balance, data_aug):
-    """ Function to save the model in the desired folder.
+    plt.style.use("seaborn")
 
-        Parameters
-        ----------
-        model : object
-            pytorch model
-        optimizer : object
-            pytorch optimizer
-        num_epoch : int
-            number of epochs trained on
-        acc : float
-            accuracy of the model
-        f1 : float
-            f1 score of the model
-        model_root : str
-            string of the folder/root path where the model will be saved
-        balance : str
-            'oversampling', 'undersampling' or other to identify how the model has been trained
-        data_aug : bool
-            True if the data augmentation has been used to train the model
-    """
+    plt.rc("font", size=12)
+    plt.rc("axes", labelsize=12)
+    plt.rc("xtick", labelsize=12)
+    plt.rc("ytick", labelsize=12)
+    plt.rc("legend", fontsize=12)
+    plt.rc("axes", titlesize=16)
+    plt.rc("figure", titlesize=16)
 
-    checkpoint = {
-        "state_dict": model.state_dict(),
-        "optimizer": optimizer.state_dict(),
-        "epoch": num_epoch,
-        "test_acc": acc,
-        "f1": f1
-    }
+    fig = reliability_diagram(np.array(y_true), np.array(y_pred), np.array(conf), num_bins=10, draw_ece=True,
+                        draw_bin_importance="alpha", draw_averages=True,
+                        title="Reliability diagram", figsize=(6, 6), dpi=100,
+                        return_fig=False)
 
-    # Model path
-    if balance in ["oversampling", "undersampling"]:
-        if data_aug:
-            model_path = join(model_root, "_".join([model.name, balance, "DA"]) + ".pth.tar")
-        else:
-            model_path = join(model_root, "_".join([model.name, balance]) + ".pth.tar")
-
-    else:
-        if data_aug:
-            model_path = join(model_root, "_".join([model.name, "DA"]) + ".pth.tar")
-        else:
-            model_path = join(model_root, model.name + ".pth.tar")
-
-    torch.save(checkpoint, model_path)
-    print("Model saved...")
+    fig.savefig(join(next_folder, "reliability_diagram.png"))

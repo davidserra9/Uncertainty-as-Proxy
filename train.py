@@ -7,7 +7,7 @@ from os.path import join
 from torch.utils.data import DataLoader
 from utils.config_parser import load_yml
 from utils.UW_dataset import UWDataset
-from utils.NN_functions import initialize_model, train_fn, eval_fn, save_model, inference_saved_model, dropout_train
+from utils.NN_functions import *
 
 def main():
     """ Main function of the model (training and evaluation) """
@@ -24,21 +24,17 @@ def main():
     wandb.init(project="week4",
                entity="tfm",
                name=cfg.species_classification.model,
-               config=dict(balanced_dataset=cfg.species_classification.balance,
-                           learning_rate=cfg.species_classification.learning_rate,
+               config=dict(learning_rate=cfg.species_classification.learning_rate,
                            architecture=cfg.species_classification.model,
-                           train_splits=cfg.species_classification.train_splits,
-                           test_splits=cfg.species_classification.test_splits,
                            epochs=cfg.species_classification.num_epochs,
                            batch_size=cfg.species_classification.batch_size,
                            ))
+
 
     # Initialize the model
     model = initialize_model(model_name=cfg.species_classification.model,
                              num_classes=len(cfg.species),
                              load_model=cfg.species_classification.load_model,
-                             balance=cfg.species_classification.balance,
-                             data_aug=cfg.species_classification.data_aug,
                              model_root=cfg.model_path)
     model.to(DEVICE)
 
@@ -98,9 +94,7 @@ def main():
                        num_epoch=epoch,
                        acc=test_acc,
                        f1=test_f1,
-                       model_root=cfg.model_path,
-                       balance=cfg.species_classification.balance,
-                       data_aug=cfg.species_classification.data_aug)
+                       model_root=cfg.model_path)
 
         wandb.log({"train_loss": train_loss,
                    "train_accuracy": train_acc,
@@ -118,8 +112,6 @@ def main():
     model = initialize_model(model_name=cfg.species_classification.model,
                              num_classes=len(cfg.species),
                              load_model=True,
-                             balance=cfg.species_classification.balance,
-                             data_aug=cfg.species_classification.data_aug,
                              model_root=cfg.model_path)
     model.to(DEVICE)
 
@@ -127,7 +119,7 @@ def main():
                           folder_path=join(cfg.species_dataset, "test_dataset"),
                           model=model,
                           list_classes=cfg.species,
-                          n_images=50,
+                          n_images=len(glob(join(cfg.species_dataset, "test_images", "*.jpg"))),
                           n_mc_samples=100,
                           output_root=cfg.output_path,
                           device=DEVICE)
