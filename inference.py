@@ -19,7 +19,7 @@ if __name__ == "__main__":
     model.to(DEVICE)
 
     # Initialize datasets
-    test_dataset = UWDataset(split_list=[join(cfg.excels_path, "test_images")],
+    test_dataset = UWDataset(split_list=[join(cfg.species_dataset, "test_images")],
                              list_classes=cfg.species,
                              train=False)
 
