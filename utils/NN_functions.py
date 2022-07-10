@@ -585,6 +585,6 @@ def inference_saved_model(loader, folder_path, model, list_classes, n_images, n_
     fig = reliability_diagram(np.array(y_true), np.array(y_pred), np.array(conf), num_bins=10, draw_ece=True,
                         draw_bin_importance="alpha", draw_averages=True,
                         title="Reliability diagram", figsize=(6, 6), dpi=100,
-                        return_fig=False)
+                        return_fig=True)
 
     fig.savefig(join(next_folder, "reliability_diagram.png"))
