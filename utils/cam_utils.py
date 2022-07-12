@@ -12,7 +12,7 @@ The techniques implemented are:
         "Grad-CAM++: Improved Visual Explanations for Deep Convolutional Networks"
         https://arxiv.org/abs/1710.11063
     - Smooth Grad-CAM++: Smooth Grad-CAM++, from the paper:
-        "Smooth Grad-CAM++: Improving Visual Explanations for Deep Convolutional Networks"
+        "Smooth Grad-CAM++: An Enhanced Inference Level Visualization Technique for Deep Convolutional Neural Network Model"
         https://arxiv.org/abs/1908.01224
     - Score-CAM: Score-weighted Class Activation Map, from the paper:
         "Score-Weighted Visual Explanations for Convolutional Neural Networks"
