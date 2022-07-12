@@ -1,3 +1,8 @@
+# -*- coding: utf-8 -*-
+"""
+This module contains the custom dataset class
+@author: David Serrano Lozano, @davidserra9
+"""
 import cv2
 import json
 import torch
@@ -13,7 +18,7 @@ from torch.utils.data import Dataset
 from albumentations.pytorch import ToTensorV2
 from torchvision import transforms as transforms
 from utils.config_parser import load_yml
-
+from utils.NN_utils import get_training_augmentations, get_validation_augmentations
 
 class UWDataset(Dataset):
     """ Custom dataset class for loading images and labels from a list of directories divided in splits """
@@ -28,7 +33,7 @@ class UWDataset(Dataset):
             split_list : list
                 List of folder paths in which the images are.
             list_classes : list
-                List of the names of the classes.
+                names of the classes.
             img_per_annot : int
                 Number of images per annotation. 1, 3(+-0.5s) or 5(+-1s and +-0.5s).
             train : bool
@@ -122,23 +127,7 @@ class UWDataset(Dataset):
                                                      'label': label,
                                                      'one-hot': annot_dict['one-hot']})
 
-            self.transforms = A.Compose([
-                A.GaussNoise(p=0.2),
-                A.OneOf([
-                    A.MotionBlur(p=0.2),
-                    A.MedianBlur(blur_limit=5, p=0.2),
-                    A.Blur(blur_limit=5, p=0.2),
-                ], p=0.2),
-                A.ShiftScaleRotate(shift_limit=0.025, scale_limit=0.1, rotate_limit=10, p=0.3),
-                A.OneOf([
-                    A.CLAHE(clip_limit=2),
-                    A.RandomBrightnessContrast(),
-                ], p=0.2),
-                A.Normalize(mean=[0.4493, 0.5078, 0.4237],
-                            std=[0.1263, 0.1265, 0.1169]),
-                A.Resize(224, 224),
-                ToTensorV2(),
-            ])
+            self.transforms = get_training_augmentations()
 
         else:
             for label, annot_list in annot.items():
@@ -147,12 +136,7 @@ class UWDataset(Dataset):
                                              'label': label,
                                              'one-hot': annot_dict['one-hot']})
 
-            self.transforms = A.Compose([
-                A.Resize(224, 224),
-                A.Normalize(mean=[0.4493, 0.5078, 0.4237],
-                            std=[0.1263, 0.1265, 0.1169]),
-                ToTensorV2()
-            ])
+            self.transforms = get_validation_augmentations()
 
         # Show the number of classes and the number of images per class
         print(f'\nNumber of classes from splits: {[x.split("/")[-1] for x in split_list]}')
@@ -200,3 +184,5 @@ if __name__ == "__main__":
         split_list=[join(cfg.excels_path, "test_images")],
         list_classes=cfg.species,
         train=False)
+
+    x = train_dataset[0]

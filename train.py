@@ -2,21 +2,21 @@ import time
 import torch
 import wandb
 import torch.nn as nn
+from glob import glob
 import torch.optim as optim
-from os.path import join
 from torch.utils.data import DataLoader
 from utils.config_parser import load_yml
 from utils.UW_dataset import UWDataset
-from utils.NN_functions import *
+from utils.NN_utils import *
+from utils.inference_utils import inference_fn
 
 def main():
     """ Main function of the model (training and evaluation) """
 
     cfg = load_yml("config.yml")
-    DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
     # Find which device is used
-    if torch.cuda.is_available() and DEVICE=="cuda":
+    if torch.cuda.is_available() and cfg.device == "cuda":
         print(f'Training the model in {torch.cuda.get_device_name(torch.cuda.current_device())}')
     else:
         print('CAREFUL!! Training the model with CPU')
@@ -36,7 +36,7 @@ def main():
                              num_classes=len(cfg.species),
                              load_model=cfg.species_classification.load_model,
                              model_root=cfg.model_path)
-    model.to(DEVICE)
+    model.to(cfg.device)
 
     # Initialize optimizer, loss and scaler
     optimizer = optim.Adam(model.parameters(),
@@ -78,11 +78,11 @@ def main():
 
     for epoch in range(cfg.species_classification.num_epochs):
 
-        train_acc, train_loss = train_fn(train_loader, model, optimizer, loss_fn, scaler, DEVICE, epoch)  # Train the model
+        train_acc, train_loss = train_fn(train_loader, model, optimizer, loss_fn, scaler, cfg.device, epoch)  # Train the model
         train_metrics['accuracy'].append(train_acc)  # Append train accuracy
         train_metrics['loss'].append(train_loss)  # Append train accuracy
 
-        test_acc, test_loss, test_f1 = eval_fn(test_loader, model, loss_fn, DEVICE, epoch)  # Validate the model in the test set
+        test_acc, test_loss, test_f1 = eval_fn(test_loader, model, loss_fn, cfg.device, epoch)  # Validate the model in the test set
         test_metrics['accuracy'].append(test_acc)   # Append test accuracy
         test_metrics['loss'].append(test_loss)      # Append test loss
         test_metrics['f1'].append(test_f1)          # Append test f1 score
@@ -113,16 +113,16 @@ def main():
                              num_classes=len(cfg.species),
                              load_model=True,
                              model_root=cfg.model_path)
-    model.to(DEVICE)
+    model.to(cfg.device)
 
-    inference_saved_model(loader=test_loader,
-                          folder_path=join(cfg.species_dataset, "test_dataset"),
-                          model=model,
-                          list_classes=cfg.species,
-                          n_images=len(glob(join(cfg.species_dataset, "test_images", "*.jpg"))),
-                          n_mc_samples=100,
-                          output_root=cfg.output_path,
-                          device=DEVICE)
+    inference_fn(loader=test_loader,
+                 folder_path=join(cfg.species_dataset, "test_images"),
+                 model=model,
+                 list_classes=cfg.species,
+                 n_images=len(glob(join(cfg.species_dataset, "test_images", "*.jpg"))),
+                 n_mc_samples=100,
+                 output_root=cfg.output_path,
+                 device=cfg.device)
 
 if __name__ == '__main__':
     main()

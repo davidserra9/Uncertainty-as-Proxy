@@ -1,4 +1,8 @@
-import os
+# -*- coding: utf-8 -*-
+"""
+This module contains the code for computing and visualizing the reliability diagram (acc vs predictive mean)
+@author: David Serrano Lozano, @davidserra9
+"""
 import numpy as np
 import matplotlib.pyplot as plt
 
