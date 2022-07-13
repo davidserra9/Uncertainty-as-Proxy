@@ -314,8 +314,8 @@ def inference_fn(loader, folder_path, model, list_classes, n_images, n_mc_sample
 
             img_id = list_paths[0].split("/")[-1].split("_")[1]
             y_true.append(list_classes.index(df.loc[df['img_id'] == int(img_id), 'annotation'].item()))
-            y_pred.append(m.argmax())
-            conf.append(m.max())
+            y_pred.append(np.unravel_index(mean.argmax(), mean.shape)[1])
+            conf.append(np.max(mean))
 
             plt.suptitle(
                 f"Filename: {list_paths[0].split('/')[-1]}\nGround Truth: {df.loc[df['img_id'] == int(img_id), 'annotation'].item()}\n{model.name} - {wrapper.__class__.__name__}",

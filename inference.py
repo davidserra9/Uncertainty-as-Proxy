@@ -37,9 +37,10 @@ if __name__ == "__main__":
                  folder_path=join(cfg.species_dataset, "test_images"),
                  model=model,
                  list_classes=cfg.species,
-                 # n_images=len(glob(join(cfg.species_dataset, "test_images", "*.jpg"))),
-                 n_images=5,
+                 n_images=len(glob(join(cfg.species_dataset, "test_images", "*.jpg"))),
+                 # n_images=5,
                  n_mc_samples=10,
                  output_root=cfg.output_path,
                  device=cfg.device,
-                 cam="CAM")
+                 cam="CAM",
+                 cm=False)
