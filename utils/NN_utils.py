@@ -13,6 +13,7 @@ from sklearn.metrics import f1_score
 from tqdm import tqdm
 from beautifultable import BeautifulTable
 from albumentations.pytorch import ToTensorV2
+from timm import create_model
 
 def initialize_model(model_name, num_classes, load_model, model_root):
     """ Function to initialize the model depending on the desired architecture.
@@ -34,21 +35,36 @@ def initialize_model(model_name, num_classes, load_model, model_root):
     """
 
     # Implemented architectures
-    IMP_ARCH = ['resnet18', 'resnet34', 'resnet50', 'resnet101', 'resnet152',
-                'efficientnet_b0', 'efficientnet_b1', 'efficientnet_b2', 'efficientnet_b3', 'efficientnet_b4',
-                'efficientnet_b5', 'efficientnet_b6', 'efficientnet_b7']
+    IMP_ARCH = ['vgg16', 'vgg19',
+                'resnet18', 'resnet34', 'resnet50', 'resnet101', 'resnet152',
+                'efficientnet_b0', 'efficientnet_b1', 'efficientnet_b2', 'efficientnet_b3',
+                'efficientnet_b4', 'efficientnet_b5', 'efficientnet_b6', 'efficientnet_b7',
+                'convnext_tiny', 'convnext_large']
 
     try:
         if model_name in IMP_ARCH:
-            model = getattr(models, model_name)(pretrained=True)
-            if 'resnet' in model_name:
+            if 'vgg' in model_name:
+                model = getattr(models, model_name)(pretrained=True)
+                num_features = model.classifier[-1].in_features
+                model.classifier[-1] = nn.Linear(num_features, num_classes)
+                model.name = model_name
+
+            elif 'resnet' in model_name:
+                model = getattr(models, model_name)(pretrained=True)
                 num_ftrs = model.fc.in_features
                 model.fc = nn.Linear(num_ftrs, num_classes)
                 model.name = model_name
 
             elif 'efficientnet' in model_name:
+                model = getattr(models, model_name)(pretrained=True)
                 num_ftrs = model.classifier[1].in_features
                 model.classifier[1] = nn.Linear(num_ftrs, num_classes)
+                model.name = model_name
+
+            elif 'convnext' in model_name:
+                model = create_model(model_name, pretrained=True)
+                num_ftrs = model.head[-1].in_features
+                model.head[-1] = nn.Linear(num_ftrs, num_classes)
                 model.name = model_name
 
         else:
@@ -57,7 +73,7 @@ def initialize_model(model_name, num_classes, load_model, model_root):
     except Exception as e:
         print(e)
         print(f'Model {model_name} not found. Please check the model name or torchvision version.')
-        print(f"Models implemented:\nResNet18/34/50/101/152\nEfficientNet_b0-7")
+        print(f"Models implemented:\nVGG16/VGG19\nResNet18/34/50/101/152\nEfficientNet_b0-7")
         exit()
 
     # If load_model==True, load the weights of the model
@@ -71,7 +87,7 @@ def initialize_model(model_name, num_classes, load_model, model_root):
         # Print the model parameters
         bt = BeautifulTable()
         bt.columns.header = ["architecture", "epoch", "accuracy", "f1 score"]
-        bt.rows.append([model_name, checkpoint['epoch'], checkpoint['test_acc'], checkpoint['f1']])
+        bt.rows.append([model_name, checkpoint['epoch'], f"{checkpoint['test_acc']:.4f}", f"{checkpoint['f1']:.4f}"])
         print()
         print(bt)
 
