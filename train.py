@@ -88,7 +88,7 @@ def main():
         test_metrics['f1'].append(test_f1)          # Append test f1 score
 
         # If the validation accuracy is the best one so far, save the model
-        if ((test_f1 == max(test_metrics['f1'])) and (epoch > 0)) and cfg.species_classification.save_model:
+        if (test_f1 == max(test_metrics['f1'])) and cfg.species_classification.save_model:
             save_model(model=model,
                        optimizer=optimizer,
                        num_epoch=epoch,
