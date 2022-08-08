@@ -49,7 +49,7 @@ if __name__ == "__main__":
                    loader=test_loader,
                    output_root=cfg.output_path,
                    list_classes=cfg.species,
-                   mc_samples=10,
+                   mc_samples=50,
                    device=cfg.device,
                    cm=False,
                    uncertainty=True,

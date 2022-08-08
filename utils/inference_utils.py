@@ -22,8 +22,8 @@ from sklearn.metrics import confusion_matrix, accuracy_score, auc
 from utils.NN_utils import get_validation_augmentations
 from utils.cam_utils import AM_initializer
 from utils.MCDP_utils import MCDP_model
+from utils.uncertainty_metrics import uncertainty_box_plot, uncertainty_curve
 from utils.reliability import reliability_diagram
-
 
 def confusion_matrix_fn(loader, model, list_classes, device) -> plt.Figure:
     """ Function to compute and save the confusion matrix
@@ -131,54 +131,6 @@ def plot_cm(y_pred, y_true, list_classes) -> plt.Figure:
 
     return fig
 
-
-def append_dropout(model, rate=0.2) -> None:
-    """ Function to append a dropout layer after a ReLu layer
-
-        Parameters:
-        ----------
-        model: object
-            pytorch model to append the dropout layers
-        rate: float
-            dropout rate
-    """
-    for name, module in model.named_children():
-        if len(list(module.children())) > 0:
-            append_dropout(module)
-        if name == 'layer4':
-            new = nn.Sequential(module, nn.Dropout2d(p=rate, inplace=True))
-            setattr(model, name, new)
-
-
-def enable_dropout(model) -> None:
-    """ Function to enable the dropout layers during test-time
-
-        Parameters
-        ----------
-        model : object
-            pytorch model to enable (train mode) the dropout layers
-    """
-    for m in model.modules():
-        if m.__class__.__name__.startswith('Dropout'):
-            m.train()
-
-
-def dropout_train(model) -> None:
-    """ Function to add dropout if needed and put dropout layers in train mode
-
-        Parameters
-        ----------
-        model : object
-            pytorch model to add dropout and put dropout layers in train mode
-    """
-
-    if 'resnet' in model.name:
-        append_dropout(model, rate=0.5)
-        enable_dropout(model)
-    elif 'efficientnet' in model.name:
-        enable_dropout(model)
-
-
 def predictive_entropy(mean):
     """ Function to compute the predictive entropy of the network
 
@@ -199,7 +151,8 @@ def predictive_entropy(mean):
     epsilon = sys.float_info.min
     return -np.sum(np.mean(mean, axis=1) * np.log(np.mean(mean, axis=1) + epsilon), axis=-1)
 
-def bhattacharyya_coefficient(data1, data2):
+
+def bhattacharyya_coefficient(dropout_predictions):
     """ Function to compute the BC from two set of points.
 
     Parameters
@@ -212,24 +165,31 @@ def bhattacharyya_coefficient(data1, data2):
 
     """
 
-    hist1 = np.histogram(data1, bins=[i*0.01 for i in range(0, 101)])[0]
-    hist2 = np.histogram(data2, bins=[i*0.01 for i in range(0, 101)])[0]
+    def hist_1d(a):
+        """ Compute the histogram of a 1D array with 100 bins between 0 and 1."""
+        return np.histogram(a, bins=[i * 0.01 for i in range(0, 101)])[0]
 
-    sq = 0
-    for bin1, bin2 in zip(hist1, hist2):
-        sq += np.sqrt(bin1 * bin2)
+    # First, obtain the two classes with the highest predictive mean along all the images from the same
+    mean = np.mean(np.mean(dropout_predictions, axis=1), axis=1)  # MC samples and images/annot mean: shape (I, C)
+    clss1 = mean.argsort(axis=-1)[:, -1]  # class with the highest predictive mean: shape (I,)
+    clss2 = mean.argsort(axis=-1)[:, -2]  # class with the second highest predictive mean (I,)
 
-    return sq/len(data1)
+    # Compute the histograms of the top-2 classes for each annotation (I, bins=100)
+    hist1 = np.apply_along_axis(hist_1d, axis=1, arr=np.mean(dropout_predictions, axis=2)[range(len(clss1)), :, clss1])
+    hist2 = np.apply_along_axis(hist_1d, axis=1, arr=np.mean(dropout_predictions, axis=2)[range(len(clss2)), :, clss2])
+
+    # Compute the Bhattacharyya coefficient for each annotation (I,)
+    return np.sum(np.sqrt(hist1 * hist2), axis=1)
 
 def inference_fnv2(model, loader, output_root, list_classes, mc_samples, device,
                    cm, uncertainty, cam) -> None:
 
     # Create the folder in which the output files will be saved. It is created with the experiment number taking
     # into account the amount of previous experiments/folders
-    os.makedirs(output_root, exist_ok=True)                     # Ensure that the output folder exists
-    next_folder = len(os.listdir(output_root)) + 1              # Get the next folder number
-    next_folder = join(output_root, f"inf{next_folder:02}")     # Create the next folder name
-    os.makedirs(next_folder)                                    # Create the next folder
+    os.makedirs(output_root, exist_ok=True)  # Ensure that the output folder exists
+    next_folder = len(os.listdir(output_root)) + 1  # Get the next folder number
+    next_folder = join(output_root, f"inf{next_folder:02}")  # Create the next folder name
+    os.makedirs(next_folder)  # Create the next folder
 
     # --- CONFUSION MATRIX ---
     if cm:
@@ -255,7 +215,7 @@ def inference_fnv2(model, loader, output_root, list_classes, mc_samples, device,
         # Iterate over the loader and stack all the batches predictions
         for (batch, target) in tqdm(loader, desc="Uncertainty with MC Dropout"):
             batch, target = batch.to(device), target.to(device)
-            outputs = mc_wrapper(batch)     # (batch_size, mc_samples, images_per_annotations, num_classes)
+            outputs = mc_wrapper(batch)  # (batch_size, mc_samples, images_per_annotations, num_classes)
             dropout_predictions = np.vstack((dropout_predictions, outputs))
             true_y = np.append(true_y, target.cpu().numpy())
 
@@ -266,6 +226,15 @@ def inference_fnv2(model, loader, output_root, list_classes, mc_samples, device,
         pred_y = mean.max(axis=1).argmax(axis=-1)
         pred_std = std[np.arange(mean.shape[0]), mean.max(axis=2).argmax(axis=-1), mean.max(axis=1).argmax(axis=-1)]
         pred_entropy = predictive_entropy(mean)
+        pred_bc = bhattacharyya_coefficient(dropout_predictions)
+
+        fig = uncertainty_box_plot(y_true=true_y, y_pred=pred_y, std=pred_std, entropy=pred_entropy, BC=pred_bc)
+        fig.savefig(join(next_folder, "uncertainty_boxplot.png"))
+        plt.close()
+
+        fig = uncertainty_curve(y_true=true_y, y_pred=pred_y, std=pred_std)
+        fig.savefig(join(next_folder, "uncertainty_curve.png"))
+        plt.close()
 
 def inference_fn(loader, folder_path, model, list_classes, n_images, n_mc_samples, output_root, device, cm=True,
                  uncertainty=True, cam="CAM") -> None:
@@ -303,36 +272,36 @@ def inference_fn(loader, folder_path, model, list_classes, n_images, n_mc_sample
     random.seed(41)
 
     # Create the folder in which the output files will be saved
-    os.makedirs(output_root, exist_ok=True)                         # Ensure that the output folder exists
-    next_folder = len(os.listdir(output_root)) + 1                  # Get the next folder number
-    next_folder = join(output_root, f"inf{next_folder:02}")         # Create the next folder name
-    os.makedirs(next_folder)                                        # Create the next folder
+    os.makedirs(output_root, exist_ok=True)  # Ensure that the output folder exists
+    next_folder = len(os.listdir(output_root)) + 1  # Get the next folder number
+    next_folder = join(output_root, f"inf{next_folder:02}")  # Create the next folder name
+    os.makedirs(next_folder)  # Create the next folder
 
     # Chose the images to run inference on
-    df = pd.read_csv(glob(join(folder_path, "*.ods"))[0])           # Load the dataframe with the images gt
-    all_images = glob(join(folder_path, "*.jpg"))                   # Get all the images in the folder
-    random.shuffle(all_images)                                      # Shuffle the image paths
-    query_images = glob(join(folder_path, "*a.jpg"))[:n_images]     # Get the first 20 images (randomly chosen)
+    df = pd.read_csv(glob(join(folder_path, "*.ods"))[0])  # Load the dataframe with the images gt
+    all_images = glob(join(folder_path, "*.jpg"))  # Get all the images in the folder
+    random.shuffle(all_images)  # Shuffle the image paths
+    query_images = glob(join(folder_path, "*a.jpg"))[:n_images]  # Get the first 20 images (randomly chosen)
 
     # Find all the images of the same annotation
     same_annot = [[r for r in sorted(all_images) if q[:-6] in r] for q in query_images]
 
-    transformations = get_validation_augmentations()                # Get the val/test transformations
-    softmax = nn.Softmax(dim=1)                                     # Create the softmax layer
+    transformations = get_validation_augmentations()  # Get the val/test transformations
+    softmax = nn.Softmax(dim=1)  # Create the softmax layer
 
     # Copy the model to have one without the dropout layers in train mode and another with the dropout layers in eval
-    model.eval()                                                    # Set the model in evaluation mode
-    model_dropout = copy.deepcopy(model)                            # Create a copy of the model
-    dropout_train(model_dropout)                                    # Add dropout and put dropout layers in train mode
-    model_dropout.to(device)                                        # Move the model to device
+    model.eval()  # Set the model in evaluation mode
+    model_dropout = copy.deepcopy(model)  # Create a copy of the model
+    dropout_train(model_dropout)  # Add dropout and put dropout layers in train mode
+    model_dropout.to(device)  # Move the model to device
     model.to(device)
     # Move the model to device
     # To compute the reliability diagram
-    y_true = []                                                     # List with the ground truth labels
-    y_pred = []                                                     # List with the predicted labels
-    pred_var = []                                                   # List with the predictive mean values
-    pred_entropy = []                                               # List with the predictive entropy values
-    pred_BC = []                                                    # List with the Bhattacharyya coefficient values
+    y_true = []  # List with the ground truth labels
+    y_pred = []  # List with the predicted labels
+    pred_var = []  # List with the predictive mean values
+    pred_entropy = []  # List with the predictive entropy values
+    pred_BC = []  # List with the Bhattacharyya coefficient values
 
     # --- CONFUSION MATRIX ---
     if cm:
@@ -352,11 +321,11 @@ def inference_fn(loader, folder_path, model, list_classes, n_images, n_mc_sample
         for annot_idx, list_paths in enumerate(tqdm(same_annot, desc="Uncertainty Estimation and Activation Maps")):
             same_annot_img = [cv2.imread(path)[:, :, ::-1] for path in list_paths]  # Load the images
 
-            num_img = len(list_paths)                                               # Get the number of images/annot
+            num_img = len(list_paths)  # Get the number of images/annot
             # figure, axes = plt.subplots(nrows=2, ncols=num_img, figsize=(20, 8))    # Create the figure
 
             # Generate the uncertainty estimates of the current annotation
-            dropout_predictions = np.empty((0, num_img, len(list_classes)))         # Array to store the samples
+            dropout_predictions = np.empty((0, num_img, len(list_classes)))  # Array to store the samples
 
             # Iterate through the images as many times as the number of Monte-Carlo samples
             for idx_mc in range(n_mc_samples):
@@ -369,8 +338,8 @@ def inference_fn(loader, folder_path, model, list_classes, n_images, n_mc_sample
                 dropout_predictions = np.vstack((dropout_predictions, outputs.cpu().numpy()[np.newaxis, :, :]))
 
             # Compute the uncertainty estimate of the current annotation
-            mean = np.mean(dropout_predictions, axis=0)                             # shape (n_samples, n_classes)
-            std = np.std(dropout_predictions, axis=0)                          # shape (n_samples, n_classes)
+            mean = np.mean(dropout_predictions, axis=0)  # shape (n_samples, n_classes)
+            std = np.std(dropout_predictions, axis=0)  # shape (n_samples, n_classes)
 
             # # Plot the original images and the predictive mean and variance
             # for img_idx, (img, m, s) in enumerate(zip(same_annot_img, mean, std)):
@@ -417,82 +386,6 @@ def inference_fn(loader, folder_path, model, list_classes, n_images, n_mc_sample
         #
         # fig.savefig(join(next_folder, "reliability_diagram.png"))
 
-def uncertainty_box_plot(y_true, y_pred, **metrics):
-    """ Function to generate a box plot of the correct/incorrect predictions with the uncertainty estimates.
-
-    Parameters
-    ----------
-    y_true : np.array
-        Ground truth labels.
-    y_pred : np.array
-        Predicted labels.
-    uncertainty : np.array
-        Uncertainty estimates.
-
-    Returns
-    -------
-    fig : matplotlib.figure.Figure
-        The figure with the box plot.
-    """
-
-    title_names = []                                # list of the names of the metrics
-
-    # First, divide the correct/incorrect predictions into two different groups
-    correct = []
-    incorrect = []
-
-    df = pd.DataFrame({'uncertainty': [val for sublist in metrics.values() for val in sublist],
-                       'type': [key for key, values in metrics.items() for _ in values],
-                       'correct': [len(set(i)) == 1 for i in zip(y_true, y_pred)] + [len(set(i)) == 1 for i in zip(y_true, y_pred)]})
-
-    for name, metrics in metrics.items():
-        title_names.append(name)
-        bool_idx = [len(set(i)) == 1 for i in zip(y_true, y_pred)]
-        correct.append(np.asarray([i for (i, v) in zip(metrics, bool_idx) if v]))
-        incorrect.append(np.asarray([i for (i, v) in zip(metrics, bool_idx) if not v]))
-
-    sns.set_theme(style="whitegrid")
-
-    ax = sns.violinplot(y='uncertainty', x='type', hue='correct', data=df, orient="v")
-    handles, labels = ax.get_legend_handles_labels()
-    plt.legend(handles[0:2], labels[0:2])
-    plt.show()
-
-    sns.histplot(correct[0], alpha=0.3, bins=[i*0.01 for i in range(0, 101)], label="Correct", color="green")
-    sns.histplot(incorrect[0], alpha=0.3, bins=[i*0.01 for i in range(0, 101)], label="Incorrect", color="red")
-    plt.legend()
-    plt.xlim([0, max([max(correct[0]), max(incorrect[0])])])
-    plt.show()
-
-    print(bhattacharyya_coefficient(correct[0], incorrect[0]))
-
-    sns.distplot(correct[0], hist=False, kde=True, color="green", label="Correct",
-                 kde_kws={'shade': True, 'linewidth': 3})
-    sns.distplot(incorrect[0], hist=False, kde=True, color="red", label="Incorrect",
-                 kde_kws={'shade': True, 'linewidth': 3})
-    plt.legend()
-    plt.xlim([0, max([max(correct[0]), max(incorrect[0])])])
-    plt.show()
-
-
-def uncertainty_curve(y_true, y_pred, **metrics):
-
-    for name, metric in metrics.items():
-        accuracy = []
-        # Sort predictions by uncertainty
-        metric, y_true_ord, y_pred_ord = (list(t) for t in zip(*sorted(zip(metric, y_true, y_pred), reverse=True)))
-
-        for idx in range(len(y_true_ord)):
-            accuracy.append(accuracy_score(y_true_ord, y_pred_ord))
-            y_pred_ord[idx] = y_true_ord[idx]
-
-        au = auc(np.array(range(len(accuracy)))/len(accuracy), accuracy)
-        plt.plot((np.array(range(len(accuracy)))*100)/len(accuracy), accuracy, label=f"{name} - AUC: {au:.4f}")
-
-    plt.xlabel("Percentage of asked samples (%)")
-    plt.ylabel("Accuracy")
-    plt.legend()
-    plt.show()
 
 if __name__ == "__main__":
     uncertainty_box_plot(np.array([random.randint(0, 3) for _ in range(10)]),

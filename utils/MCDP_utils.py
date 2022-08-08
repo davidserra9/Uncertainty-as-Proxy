@@ -13,7 +13,8 @@ class MCDP_model(object):
     Implemented Architectures: (if the architecture does not have a dropout layer, then it is added at inference time)
         - VGG
         - ResNet
-        - EffectNet
+        - EfficientNet
+        - EfficientNetV2
         - ConvNeXt
     """
 
@@ -26,22 +27,40 @@ class MCDP_model(object):
         self.softmax = nn.Softmax(dim=2)
         self.device = device
 
-        if 'VGG' in model.name:
+        # VGG: dropout layer in train mode
+        if 'vgg' in model.name:
             self.model = self.train_dropout(self.model)
-        elif 'resnet' in model.name:
-            self.model = self.append_dropout(self.model)
-            self.model = self.train_dropout(self.model)
-        elif 'efficientnet' in model.name:
-            pass
-        elif 'convnext' in model.name:
-            pass
 
-    def append_dropout(self, model):
-        """ Append dropout layer to the model
+        # ResNet: append dropout layer in the classifier in train mode
+        elif 'resnet' in model.name:
+            self.model = self.append_dropout_resnet(self.model)
+            self.model = self.train_dropout(self.model)
+
+        # EfficientNet: dropout layer in train mode
+        elif 'efficientnet_b' in model.name:
+            self.model = self.train_dropout(self.model)
+
+        # EfficientNetV2: dropout layer in train mode
+        elif 'effificnet_v2_b' in model.name:
+            self.model = self.train_dropout(self.model)
+
+        # ConvNeXt: Add dropout layer in the classifier in train mode
+        elif 'convnext' in model.name:
+            self.model.head = self.change_dropout_rate(self.model.head)
+            self.model = self.train_dropout(self.model)
+
+    def append_dropout_resnet(self, model):
+        """ Append dropout layer to the resnet classifier
+
+            Parameters
+            ----------
+            model : torch.nn.Module
+                ResNet model (with classifier module)
         """
+
         for name, module in model.named_children():
             if len(list(module.children())) > 0:
-                self.append_dropout(module)
+                self.append_dropout_resnet(module)
             if name == 'layer4':
                 new = nn.Sequential(module, nn.Dropout2d(p=self.dropout_rate, inplace=True))
                 setattr(model, name, new)
@@ -49,11 +68,30 @@ class MCDP_model(object):
 
     def train_dropout(self, model):
         """ Function to put dropout layers in training mode
+
+            Parameters
+            ----------
+            model : torch.nn.Module
         """
         for m in model.modules():
             if m.__class__.__name__.startswith('Dropout'):
                 m.train()
 
+        return model
+
+    def change_dropout_rate(self, model):
+        """ Change the dropout rate of the model
+
+            Parameters
+            ----------
+            model : torch.nn.Module
+        """
+        for name, module in model.named_children():
+            if len(list(module.children())) > 0:
+                self.change_dropout_rate(module)
+            if name == 'drop':
+                new = nn.Sequential(module, nn.Dropout2d(p=self.dropout_rate, inplace=True))
+                setattr(model, name, new)
         return model
 
     def forward(self, x):
