@@ -74,13 +74,12 @@ def initialize_model(model_name, num_classes, load_model, model_root):
             elif 'efficientnet_b' in model_name:
                 # Handle possible changes in torchvision versions
                 if version.parse(torchvision.__version__) >= version.parse("0.13.0"):
-                    model = getattr(models, model_name)(pretrained=True)
+                    model = getattr(models, model_name)(weights="IMAGENET1K_V1")
                 elif version.parse(torchvision.__version__) >= version.parse("0.11.0"):
                     model = getattr(models, model_name)(pretrained=True)
                 else:
                     raise ValueError('EfficientNet requires torchvision >= 0.11.0! :(')
 
-                model = getattr(models, model_name)(weights="IMAGENET1K_V1")
                 num_ftrs = model.classifier[-1].in_features
                 model.classifier[-1] = nn.Linear(num_ftrs, num_classes)
                 model.name = model_name
@@ -92,7 +91,6 @@ def initialize_model(model_name, num_classes, load_model, model_root):
                 else:
                     raise ValueError('ConvNext requires torchvision >= 0.13.0! :(')
 
-                model = getattr(models, model_name)(weights="IMAGENET1K_V1")
                 num_ftrs = model.classifier[-1].in_features
                 model.classifier[-1] = nn.Linear(num_ftrs, num_classes)
                 model.name = model_name
@@ -106,8 +104,8 @@ def initialize_model(model_name, num_classes, load_model, model_root):
                 else:
                     raise ValueError('ConvNext requires torchvision >= 0.12.0! :(')
 
-                num_ftrs = model.head[-1].in_features
-                model.head[-1] = nn.Linear(num_ftrs, num_classes)
+                num_ftrs = model.classifier[-1].in_features
+                model.classifier[-1] = nn.Linear(num_ftrs, num_classes)
                 model.name = model_name
 
         else:
