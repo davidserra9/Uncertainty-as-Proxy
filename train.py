@@ -79,7 +79,7 @@ def main():
 
     # Initialize datasets
     train_dataset = UWDataset(split_list=[join(cfg.species_dataset, "train_images")],
-                                          # join(cfg.species_dataset, "val_images")],
+                                          #join(cfg.species_dataset, "val_images")],
                               list_classes=cfg.species,
                               train=True,
                               img_per_annot=cfg.species_classification.img_per_annot)

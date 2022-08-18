@@ -46,7 +46,7 @@ class MCDP_model(object):
 
         # ConvNeXt: Add dropout layer in the classifier in train mode
         elif 'convnext' in model.name:
-            self.model.head = self.change_dropout_rate(self.model.head)
+            self.model.classifier = self.change_dropout_rate(self.model.classifier)
             self.model = self.train_dropout(self.model)
 
     def append_dropout_resnet(self, model):

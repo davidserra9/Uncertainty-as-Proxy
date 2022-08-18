@@ -84,7 +84,7 @@ def initialize_model(model_name, num_classes, load_model, model_root):
                 model.classifier[-1] = nn.Linear(num_ftrs, num_classes)
                 model.name = model_name
 
-            elif 'efficientnet_v2_b' in model_name:
+            elif 'efficientnet_v2_' in model_name:
                 # Handle possible changes in torchvision versions
                 if version.parse(torchvision.__version__) >= version.parse("0.13.0"):
                     model = getattr(models, model_name)(weights="IMAGENET1K_V1")

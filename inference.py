@@ -6,7 +6,7 @@ from os.path import join
 from glob import glob
 import timeit
 from utils.NN_utils import initialize_model
-from utils.inference_utils import inference_fnv2
+from utils.inference_utils import inference_fn
 
 if __name__ == "__main__":
     cfg = load_yml("config.yml")
@@ -45,11 +45,11 @@ if __name__ == "__main__":
     #              cam="CAM",
     #              cm=False)
 
-    inference_fnv2(model=model,
+    inference_fn(model=model,
                    loader=test_loader,
                    output_root=cfg.output_path,
                    list_classes=cfg.species,
-                   mc_samples=50,
+                   mc_samples=10,
                    device=cfg.device,
                    cm=False,
                    uncertainty=True,
