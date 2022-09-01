@@ -4,18 +4,17 @@ This module contains the functions to train, evaluate, load and save the model.
 @author: David Serrano Lozano, @davidserra9
 """
 
+from os.path import join
 import albumentations as A
 import torch
 import torch.nn as nn
+import torchvision
 import torchvision.models as models
-from os.path import join
+from albumentations.pytorch import ToTensorV2
+from beautifultable import BeautifulTable
+from packaging import version
 from sklearn.metrics import f1_score
 from tqdm import tqdm
-import torchvision
-from packaging import version
-from beautifultable import BeautifulTable
-from albumentations.pytorch import ToTensorV2
-from timm import create_model
 
 
 def initialize_model(model_name, num_classes, load_model, model_root):
@@ -44,7 +43,6 @@ def initialize_model(model_name, num_classes, load_model, model_root):
                 'efficientnet_b4', 'efficientnet_b5', 'efficientnet_b6', 'efficientnet_b7',
                 'efficientnet_v2_s', 'efficientnet_v2_m', 'efficientnet_v2_l',
                 'convnext_tiny', 'convnext_large']
-
     try:
         if model_name in IMP_ARCH:
             if 'vgg' in model_name:
@@ -135,7 +133,6 @@ def initialize_model(model_name, num_classes, load_model, model_root):
         bt = BeautifulTable()
         bt.columns.header = ["architecture", "epoch", "accuracy", "f1 score"]
         bt.rows.append([model_name, checkpoint['epoch'], f"{checkpoint['test_acc']:.4f}", f"{checkpoint['f1']:.4f}"])
-        print()
         print(bt)
 
     else:
