@@ -6,7 +6,6 @@ This module contains the code for computing and visualizing the reliability diag
 import numpy as np
 import matplotlib.pyplot as plt
 
-
 def compute_calibration(true_labels, pred_labels, confidences, num_bins=10):
     """Collects predictions into bins used to draw a reliability diagram.
     Arguments:

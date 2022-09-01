@@ -1,12 +1,19 @@
+# -*- coding: utf-8 -*-
+"""
+This script contains the model wrapper which ease the uncertainty estimation from Monte-Carlo dropout method.
+It uses a lot of matrix computations to speed up the forward passes.
+The implemented architectures are:
+    - VGG
+    - ResNet
+    - EfficientNet
+    - EfficientNetV2
+    - ConvNeXt
+"""
+
 import torch
 import numpy as np
 import torch.nn as nn
-from os.path import join
-from torch.utils.data import DataLoader
 
-from utils.UW_dataset import UWDataset
-from utils.config_parser import load_yml
-from utils.NN_utils import initialize_model
 
 class MCDP_model(object):
     """Monte-Carlo Dropout model wrapper
@@ -133,35 +140,3 @@ class MCDP_model(object):
 
     def __call__(self, x):
         return self.forward(x)
-
-if __name__ == "__main__":
-    cfg = load_yml("../config.yml")
-
-    # Initialize the model
-    model = initialize_model(model_name=cfg.species_classification.model,
-                             num_classes=len(cfg.species),
-                             load_model=True,
-                             model_root=cfg.model_path)
-
-    model.to(cfg.device)
-
-    # Initialize datasets
-    test_dataset = UWDataset(split_list=[join(cfg.species_dataset, "test_images")],
-                             list_classes=cfg.species,
-                             train=False)
-
-    test_loader = DataLoader(test_dataset,
-                             batch_size=cfg.species_classification.batch_size,
-                             num_workers=cfg.species_classification.num_workers,
-                             pin_memory=True,
-                             shuffle=True)
-
-    print(len(test_loader))
-
-    MCDP_wrapper = MCDP_model(model, len(cfg.species), mc_samples=25, dropout_rate=0.5)
-
-    batch = next(iter(test_loader))[0]
-    for (data, labels) in test_loader:
-        data = data.to(cfg.device)
-        pred = MCDP_wrapper(data)
-        print()

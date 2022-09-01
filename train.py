@@ -32,17 +32,13 @@ The training uses:
 """
 
 import time
-import torch
 import wandb
-import torch.nn as nn
-from glob import glob
 import torch.optim as optim
 from torch.utils.data import DataLoader
-from utils.config_parser import load_yml
-from utils.UW_dataset import UWDataset
 from utils.NN_utils import *
+from utils.UW_dataset import UWDataset
+from utils.config_parser import load_yml
 from utils.inference_utils import inference_fn
-
 
 def main():
     """ Main function of the model (training and evaluation) """
@@ -79,7 +75,7 @@ def main():
 
     # Initialize datasets
     train_dataset = UWDataset(split_list=[join(cfg.species_dataset, "train_images")],
-                                          #join(cfg.species_dataset, "val_images")],
+                              # join(cfg.species_dataset, "val_images")],
                               list_classes=cfg.species,
                               train=True,
                               img_per_annot=cfg.species_classification.img_per_annot)
@@ -100,6 +96,7 @@ def main():
                              num_workers=cfg.species_classification.num_workers,
                              pin_memory=True)
 
+    # Initialize the metrics dictionaries
     train_metrics = {'accuracy': [], 'loss': []}
     test_metrics = {'accuracy': [], 'loss': [], 'f1': []}
 
@@ -109,13 +106,14 @@ def main():
     print("")
     time.sleep(1)
 
+    # Training loop
     for epoch in range(cfg.species_classification.num_epochs):
 
         train_acc, train_loss = train_fn(train_loader, model, optimizer, loss_fn, scaler, cfg.device, epoch)  # Train
         train_metrics['accuracy'].append(train_acc)  # Append train accuracy
         train_metrics['loss'].append(train_loss)  # Append train accuracy
 
-        test_acc, test_loss, test_f1 = eval_fn(test_loader, model, loss_fn, cfg.device,epoch)  # Validate the model
+        test_acc, test_loss, test_f1 = eval_fn(test_loader, model, loss_fn, cfg.device, epoch)  # Validate the model
         test_metrics['accuracy'].append(test_acc)  # Append test accuracy
         test_metrics['loss'].append(test_loss)  # Append test loss
         test_metrics['f1'].append(test_f1)  # Append test f1 score
@@ -129,14 +127,14 @@ def main():
                        f1=test_f1,
                        model_root=cfg.model_path)
 
+        # Refresh wandb
         wandb.log({"train_loss": train_loss,
                    "train_accuracy": train_acc,
                    "test_loss": test_loss,
                    "test_accuracy": test_acc,
                    "test_f1": test_f1})
 
-    # Once the training has ended, run inference on the best model
-
+    # Once the training has ended, run inference on the best weights
     print("")
     print("----------- MODEL: {} --------------".format(model.__class__.__name__))
     print("----------- INFERENCE START --------------")
@@ -148,14 +146,14 @@ def main():
                              model_root=cfg.model_path)
     model.to(cfg.device)
 
-    inference_fn(loader=test_loader,
-                 folder_path=join(cfg.species_dataset, "test_images"),
-                 model=model,
-                 list_classes=cfg.species,
-                 n_images=len(glob(join(cfg.species_dataset, "test_images", "*.jpg"))),
-                 n_mc_samples=100,
+    inference_fn(model=model,
+                 loader=test_loader,
                  output_root=cfg.output_path,
-                 device=cfg.device)
+                 list_classes=cfg.species,
+                 mc_samples=50,
+                 device=cfg.device,
+                 cm=True,
+                 uncertainty=True)
 
 
 if __name__ == '__main__':

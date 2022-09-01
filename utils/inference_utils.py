@@ -1,29 +1,22 @@
 # -*- coding: utf-8 -*-
 """
-This module contains the functions to compute metrics and run inference to evaluate the model.
+This module contains the functions to run inference on a model.
 @author: David Serrano Lozano, @davidserra9
 """
 
 import os
 import sys
-import cv2
-import copy
-import torch
-import random
-import numpy as np
-import pandas as pd
-import torch.nn as nn
-import seaborn as sns
-import matplotlib.pyplot as plt
-from glob import glob
-from tqdm import tqdm
 from os.path import join
-from sklearn.metrics import confusion_matrix, accuracy_score, auc
-from utils.NN_utils import get_validation_augmentations
-from utils.cam_utils import AM_initializer
-from utils.MCDP_utils import MCDP_model
+import matplotlib.pyplot as plt
+import numpy as np
+import seaborn as sns
+import torch
+from sklearn.metrics import confusion_matrix
+from tqdm import tqdm
+from utils.MCdropout_wrapper import MCDP_model
+from utils.config_parser import load_pickle, save_pickle
 from utils.uncertainty_metrics import uncertainty_box_plot, uncertainty_curve
-from utils.reliability import reliability_diagram
+
 
 def confusion_matrix_fn(loader, model, list_classes, device) -> plt.Figure:
     """ Function to compute and save the confusion matrix
@@ -40,6 +33,7 @@ def confusion_matrix_fn(loader, model, list_classes, device) -> plt.Figure:
             'cuda' or 'cpu'
     """
 
+    model.eval()
     # Compute the confusion matrix
     loop = tqdm(loader,  # Create the tqdm bar for visualizing the progress
                 desc=f'Confusion Matrix',
@@ -106,17 +100,17 @@ def plot_cm(y_pred, y_true, list_classes) -> plt.Figure:
     sns.heatmap(cm_prob,
                 annot=True,
                 fmt='.2%',
-                cmap=plt.get_cmap('Blues'),
+                cmap=plt.get_cmap('Greys'),
                 annot_kws={"size": 10},
                 yticklabels=labels,
                 xticklabels=labels,
                 ax=ax)
 
-    title = f"Confusion Matrix"
+    # title = f"Confusion Matrix"
     ax.xaxis.tick_top()
     ax.xaxis.set_label_position('top')
     ax.tick_params(labelsize=10, length=0)
-    ax.set_title(title, size=18, pad=20)
+    # ax.set_title(title, size=18, pad=20)
     ax.set_xlabel('Predicted Values', size=14)
     ax.set_ylabel('Actual Values', size=14)
 
@@ -130,6 +124,7 @@ def plot_cm(y_pred, y_true, list_classes) -> plt.Figure:
                 ha='center', va='top', size=10)
 
     return fig
+
 
 def predictive_entropy(mean):
     """ Function to compute the predictive entropy of the network
@@ -167,7 +162,7 @@ def bhattacharyya_coefficient(dropout_predictions):
 
     def hist_1d(a):
         """ Compute the histogram of a 1D array with 100 bins between 0 and 1."""
-        return np.histogram(a, bins=[i * 0.01 for i in range(0, 101)])[0]
+        return np.histogram(a, bins=[i * 0.05 for i in range(0, 21)])[0]
 
     # First, obtain the two classes with the highest predictive mean along all the images from the same
     mean = np.mean(np.mean(dropout_predictions, axis=1), axis=1)  # MC samples and images/annot mean: shape (I, C)
@@ -181,17 +176,36 @@ def bhattacharyya_coefficient(dropout_predictions):
     # Compute the Bhattacharyya coefficient for each annotation (I,)
     return np.sum(np.sqrt(hist1 * hist2), axis=1)
 
-def correct_prediction(outputs, background_idx):
-    """ Function to found the correct prediction when there exists a background class and multiple images.
-        i.e. if there are a sequence of images in which the network predicts a class in one or more images but in one
-        image the background class has higher softmax probability, the correct prediction has to be the non-background
-        class.
-    """
-
 
 def inference_fn(model, loader, output_root, list_classes, mc_samples, device,
-                   cm, uncertainty, cam) -> None:
+                 cm, uncertainty, save=False, load=False) -> None:
+    """ Function to compute inference on a model.
+            - Compute confusion matrix from deterministic decisions
+            - Estimate uncertainty from Monte-Carlo dropout method
+            - Evaluate the uncertainty estimates with std, entropy and BC
+            - Evaluate the model and uncertainty individual metrics with CxI and UOC
 
+    Parameters
+    ----------
+    model: pytorch model
+    loader: dataloader object
+    output_root: str
+        output path to save the predictions and outcomes
+    list_classes: list
+        classes names
+    mc_samples: int
+        number of forward passes per image to compute uncertainty
+    device: str
+        "cuda" or "cpu"
+    cm: bool
+        confusion matrix
+    uncertainty: bool
+        uncertainty estimations
+    save: str
+        If not False, path to save the output MC predictions in a pickle file.
+    load: str
+        If not False, path to load the output MC predictions in a pickle file. It avoids running inference.
+    """
     # Create the folder in which the output files will be saved. It is created with the experiment number taking
     # into account the amount of previous experiments/folders
     os.makedirs(output_root, exist_ok=True)  # Ensure that the output folder exists
@@ -212,22 +226,32 @@ def inference_fn(model, loader, output_root, list_classes, mc_samples, device,
 
     # --- UNCERTAINTY ESTIMATION (MC DROPOUT) ---
     if uncertainty:
-        # Create the model wrapper in charge of running the MC experiment by adding, if needed, and putting dropout in
-        # train mode as well as stacking the predictions.
-        mc_wrapper = MCDP_model(model=model,
-                                num_classes=len(list_classes),
-                                device=device,
-                                mc_samples=mc_samples)
 
-        dropout_predictions = np.empty((0, mc_samples, next(iter(loader))[0].shape[1], len(list_classes)))
-        true_y = np.array([], dtype=np.uint8)
+        if load:
+            dropout_predictions, true_y = load_pickle(path=load)
+            print(f"MC dropout predictions loaded from {load}")
 
-        # Iterate over the loader and stack all the batches predictions
-        for (batch, target) in tqdm(loader, desc="Uncertainty with MC Dropout"):
-            batch, target = batch.to(device), target.to(device)
-            outputs = mc_wrapper(batch)  # (batch_size, mc_samples, images_per_annotations, num_classes)
-            dropout_predictions = np.vstack((dropout_predictions, outputs))
-            true_y = np.append(true_y, target.cpu().numpy())
+        else:
+            # Create the model wrapper in charge of running the MC experiment by adding, if needed, and putting dropout in
+            # train mode as well as stacking the predictions.
+            mc_wrapper = MCDP_model(model=model,
+                                    num_classes=len(list_classes),
+                                    device=device,
+                                    mc_samples=mc_samples)
+
+            dropout_predictions = np.empty((0, mc_samples, next(iter(loader))[0].shape[1], len(list_classes)))
+            true_y = np.array([], dtype=np.uint8)
+
+            # Iterate over the loader and stack all the batches predictions
+            for (batch, target) in tqdm(loader, desc="Uncertainty with MC Dropout"):
+                batch, target = batch.to(device), target.to(device)
+                outputs = mc_wrapper(batch)  # (batch_size, mc_samples, images_per_annotations, num_classes)
+                dropout_predictions = np.vstack((dropout_predictions, outputs))
+                true_y = np.append(true_y, target.cpu().numpy())
+
+            if save:
+                save_pickle(path=save, data=(dropout_predictions, true_y))
+                print(f"MC dropout predictions saves at {save}")
 
         # Mean and std of the MC predictions
         mean = np.mean(dropout_predictions, axis=1)
@@ -242,12 +266,6 @@ def inference_fn(model, loader, output_root, list_classes, mc_samples, device,
         fig.savefig(join(next_folder, "uncertainty_boxplot.png"))
         plt.close()
 
-        fig = uncertainty_curve(y_true=true_y, y_pred=pred_y, std=pred_entropy)
+        fig = uncertainty_curve(y_true=true_y, y_pred=pred_y, ent=pred_entropy)
         fig.savefig(join(next_folder, "uncertainty_curve.png"))
         plt.close()
-
-        fig
-if __name__ == "__main__":
-    uncertainty_box_plot(np.array([random.randint(0, 3) for _ in range(10)]),
-                         np.array([random.randint(0, 3) for _ in range(10)]),
-                         np.array([random.uniform(0, 1) for _ in range(10)]))

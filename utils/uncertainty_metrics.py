@@ -1,14 +1,38 @@
-import numpy as np
-import pickle
-import pandas as pd
+# -*- coding: utf-8 -*-
+"""
+This script contains the functions to compute and plot both the box plots, histograms and Uncertainty Ordering Curve
+proposed in the Master's Thesis Dissertation titled:
+"Uncertainty as a Proxy of the Generalization Error for Marine Species Identification"
+@author: David Serrano Lozano, @davidserra9
+"""
+
 import matplotlib.patches as mpl_patches
-from matplotlib.patches import Patch
 import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
 import seaborn as sns
+from matplotlib.patches import Patch
 from sklearn.metrics import accuracy_score, auc
+
 sns.set_style("whitegrid")
 
+
 def histogram_intersection(data1, data2, nbins=100):
+    """ Function to compute the intersection between two data samples
+
+        Parameters
+        ----------
+        data1: np.array
+            data array
+        data2: np.array
+            data array
+        nbins: int
+            number of bins
+
+        Returns
+        -------
+        histogram intersection: int
+    """
     h1 = np.histogram(data1, density=True, bins=[i * 0.01 for i in range(0, nbins + 1)])[0]
     h2 = np.histogram(data2, density=True, bins=[i * 0.01 for i in range(0, nbins + 1)])[0]
 
@@ -16,6 +40,22 @@ def histogram_intersection(data1, data2, nbins=100):
 
 
 def uncertainty_box_plot(y_true, y_pred, **metrics):
+    """ Function to compute and plot the box plots and histograms from uncertainty estimations split in correct and
+        incorrect samples.
+
+    Parameters
+    ----------
+    y_true: list
+        ground truth labels
+    y_pred: list
+        predicted labels
+    metrics: np.array
+        predicted uncertainty estimations. They can be obtained from different metrics (std, entropy, BC...)
+
+    Returns
+    -------
+    matplotlib.pyplot.Figure
+    """
 
     # correct/incorrect color palette ('green', 'red', 'green', 'red' ...)
     sns.set_palette(sns.color_palette("prism"))
@@ -33,8 +73,9 @@ def uncertainty_box_plot(y_true, y_pred, **metrics):
         subfig = sns.boxplot(data=df,
                              y=key,
                              x="status",
-                             showfliers=False,
+                             showfliers=True,
                              width=0.35,
+                             whis=[0, 100],
                              ax=axes[0, idx])
         subfig.set(xlabel=None)
         subfig.set(ylabel=None)
@@ -48,14 +89,11 @@ def uncertainty_box_plot(y_true, y_pred, **metrics):
         subfig = sns.histplot(np.ma.array(df[key], mask=(y_true == y_pred)).compressed(), stat="probability", kde=True,
                               color=sns.color_palette("prism")[1], line_kws={'linewidth': 3}, bins=100, ax=axes[1, idx])
 
-        # subfig = sns.histplot(data=df, x=key, hue="status", stat="probability", kde=True, line_kws={'linewidth': 3} , bins=100, ax=axes[1, idx])
-        # subfig = sns.histplot(data=df_2, x=key, hue="status", stat="probability", kde=True, bins=[i * 0.01 for i in range(0, 101)], ax=axes[1, idx])
-
         hist_intersection = histogram_intersection(np.ma.array(df[key], mask=np.invert(y_true == y_pred)).compressed(),
                                                    np.ma.array(df[key], mask=(y_true == y_pred)).compressed())
 
         subfig.legend([mpl_patches.Rectangle((0, 0), 1, 1, fc="white", ec="white", lw=0, alpha=0)],
-                      [f"Hist intersection: {hist_intersection:.2}"],
+                      ["C" + r"$\cap$" + f"I: {hist_intersection:.4}"],
                       loc="best", fontsize=12, fancybox=True, shadow=True, handlelength=0, handletextpad=0)
 
         subfig.set(xlabel=None)
@@ -72,6 +110,22 @@ def uncertainty_box_plot(y_true, y_pred, **metrics):
 
 
 def uncertainty_curve(y_true, y_pred, **metrics):
+    """ Function to compute and plot the Uncertainty Ordering Curve and the corresponding areas under the curve.
+
+    Parameters
+    ----------
+    y_true: list
+        ground truth labels
+    y_pred: list
+        predicted labels
+    metrics: np.array
+        predicted uncertainty estimations. They can be obtained from different metrics (std, entropy, BC...)
+
+    Returns
+    -------
+    matplotlib.pyplot.Figure
+    """
+
     sns.set_palette(sns.color_palette("Set1"))
 
     for name, metric in metrics.items():
@@ -83,11 +137,16 @@ def uncertainty_curve(y_true, y_pred, **metrics):
 
         plt.plot((np.array(range(len(y_true))) * 100) / len(y_true),
                  ideal_curve,
-                 linewidth=2,
+                 linewidth=1,
                  color='black',
                  linestyle="--",
-                 label="Perfect ordering"
                  )
+
+        plt.plot([0, 100], [ideal_curve[0], 1],
+                 linewidth=1,
+                 color='black',
+                 linestyle="--", )
+
         # sort predictions by uncertainty
         metric, y_true_ord, y_pred_ord = (list(t) for t in zip(*sorted(zip(metric, y_true, y_pred), reverse=True)))
 
@@ -101,8 +160,8 @@ def uncertainty_curve(y_true, y_pred, **metrics):
         plt.plot((np.array(range(len(accuracy))) * 100) / len(accuracy),
                  accuracy,
                  linewidth=2,
-                 label=f"{name.replace('_', ' ').capitalize()} - AUC: {au:.4f}\n"
-                       f"{' '.rjust(len(name), ' ')} - NAUC: {nau:.4f}")
+                 label=f"{name.replace('_', ' ').capitalize()} -   AUC: {au:.4f}\n"
+                       f"{name.replace('_', ' ').capitalize()} - NAUC: {nau:.4f}")
 
     plt.xlabel("Percentage of asked samples (%)")
     plt.ylabel("Accuracy")

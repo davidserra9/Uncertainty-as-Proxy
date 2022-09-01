@@ -1,24 +1,19 @@
 # -*- coding: utf-8 -*-
 """
-This module contains the custom dataset class
+This module contains the UnderWater dataset class
 @author: David Serrano Lozano, @davidserra9
 """
+
 import cv2
-import json
 import torch
 import random
 import pandas as pd
-import collections
-import albumentations as A
 from glob import glob
 from os.path import join
-
-from matplotlib import pyplot as plt
+from beautifultable import BeautifulTable
 from torch.utils.data import Dataset
-from albumentations.pytorch import ToTensorV2
-from torchvision import transforms as transforms
-from utils.config_parser import load_yml
 from utils.NN_utils import get_training_augmentations, get_validation_augmentations
+from utils.config_parser import load_yml
 
 class UWDataset(Dataset):
     """ Custom dataset class for loading images and labels from a list of directories divided in splits """
@@ -40,6 +35,7 @@ class UWDataset(Dataset):
                 If True, the dataset is for training. If False, the dataset is for testing. When train is True, the
                 dataset is oversampled and data augmentation is applied.
         """
+        random.seed(42)
 
         self.annotations = []
         self.transforms = None
@@ -138,12 +134,16 @@ class UWDataset(Dataset):
 
             self.transforms = get_validation_augmentations()
 
+        random.shuffle(self.annotations)
+
         # Show the number of classes and the number of images per class
-        print(f'\nNumber of classes from splits: {[x.split("/")[-1] for x in split_list]}')
+        print(f'\nSplits: {[x.split("/")[-1] for x in split_list]}')
         print(
             f"{len(self.annotations[0]['image_path']) if type(self.annotations[0]['image_path']) == type([]) else 1} frames per annotation")
-        for label in list_classes:
-            print('\t', label, len([x for x in self.annotations if x['label'] == label]))
+
+        print_dataset_stats(clss=list_classes,
+                            samples=[len([x for x in self.annotations if x['label'] == label]) for label in
+                                     list_classes])
 
     def __len__(self) -> int:
         """ Length of the dataset. """
@@ -177,12 +177,17 @@ class UWDataset(Dataset):
             return images, torch.tensor(label)
 
 
-if __name__ == "__main__":
-    cfg = load_yml(path="../config.yml")
+def print_dataset_stats(clss, samples):
+    """ Function to print the number of samples of each class
 
-    train_dataset = UWDataset(
-        split_list=[join(cfg.excels_path, "test_images")],
-        list_classes=cfg.species,
-        train=False)
-
-    x = train_dataset[0]
+        Parameters
+        ----------
+        clss: list
+            class names
+        samples: list
+            samples numbers
+    """
+    bt = BeautifulTable()
+    bt.columns.header = [c.split(" ")[0] for c in clss]
+    bt.rows.append(samples)
+    print(bt)

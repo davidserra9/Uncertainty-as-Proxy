@@ -11,19 +11,15 @@ species: ["Spatangus purpureus",
           "Bonellia viridis",
           "Scyliorhinus canicula",
           "Ophiura ophiura",
-          "none"]
+          "Background"]
 
 species_classification:
-  model: "resnet18"
-  train_splits: [0, 1, 2, 3]
-  val_splits: []
-  test_splits: [4]
-  balance: "oversampling"
-  data_aug: true
-  batch_size: 32
-  num_epochs: 500
-  learning_rate: 0.001
+  model: "convnext_large"
+  batch_size: 12
+  num_epochs: 30
+  img_per_annot: 5
+  learning_rate: 0.0005
   num_workers: 12
-  load_model: true
-  save_model: false
+  load_model: false
+  save_model: true
   pin_memory: true

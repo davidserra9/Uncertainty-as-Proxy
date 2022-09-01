@@ -1,11 +1,15 @@
-import torch
-from torch.utils.data import DataLoader
-from utils.config_parser import load_yml
-from utils.UW_dataset import UWDataset
+# -*- coding: utf-8 -*-
+"""
+This script is in charge of running inference on a trained model.
+The outputs (confusion matrix, box plots, histograms and UOC) are saved in a folder in the corresponding output path
+
+@author: David Serrano Lozano, @davidserra9
+"""
 from os.path import join
-from glob import glob
-import timeit
+from torch.utils.data import DataLoader
 from utils.NN_utils import initialize_model
+from utils.UW_dataset import UWDataset
+from utils.config_parser import load_yml
 from utils.inference_utils import inference_fn
 
 if __name__ == "__main__":
@@ -33,24 +37,13 @@ if __name__ == "__main__":
     print("----------- INFERENCE START --------------")
     print("")
 
-    # inference_fn(loader=test_loader,
-    #              folder_path=join(cfg.species_dataset, "test_images"),
-    #              model=model,
-    #              list_classes=cfg.species,
-    #              # n_images=len(glob(join(cfg.species_dataset, "test_images", "*a.jpg"))),
-    #              n_images=20,
-    #              n_mc_samples=10,
-    #              output_root=cfg.output_path,
-    #              device=cfg.device,
-    #              cam="CAM",
-    #              cm=False)
-
     inference_fn(model=model,
-                   loader=test_loader,
-                   output_root=cfg.output_path,
-                   list_classes=cfg.species,
-                   mc_samples=10,
-                   device=cfg.device,
-                   cm=False,
-                   uncertainty=True,
-                   cam="CAM")
+                 loader=test_loader,
+                 output_root=cfg.output_path,
+                 list_classes=cfg.species,
+                 mc_samples=50,
+                 device=cfg.device,
+                 cm=True,
+                 uncertainty=True,
+                 save=False,
+                 load=False)
