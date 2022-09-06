@@ -1,9 +1,8 @@
-video_path: "/media/david/media/TFM/dataset/videos"
-excels_path: "/media/david/media/TFM/dataset/excels"
+video_path: ""
+excels_path: ""
 species_dataset: "/media/david/media/TFM/dataset/images"
-bottom_dataset: "/media/david/media/TFM/dataset/bottom"
 output_path: "/media/david/media/TFM/experiments"
-model_path: "/media/david/media/TFM/models_wo_val"
+model_path: "/media/david/media/TFM/models"
 
 species: ["Spatangus purpureus",
           "Echinaster sepositus",
