@@ -6,6 +6,7 @@ proposed in the Master's Thesis Dissertation titled:
 @author: David Serrano Lozano, @davidserra9
 """
 
+import sys
 import matplotlib.patches as mpl_patches
 import matplotlib.pyplot as plt
 import numpy as np
