@@ -5,6 +5,7 @@ This module contains the functions to run inference on a model.
 """
 
 import os
+import cv2
 import sys
 from os.path import join
 import matplotlib.pyplot as plt
@@ -16,7 +17,7 @@ from tqdm import tqdm
 from utils.MCdropout_wrapper import MCDP_model
 from utils.config_parser import load_pickle, save_pickle
 from utils.uncertainty_metrics import uncertainty_box_plot, uncertainty_curve
-
+from utils.NN_utils import get_validation_augmentations
 
 def confusion_matrix_fn(loader, model, list_classes, device) -> plt.Figure:
     """ Function to compute and save the confusion matrix
@@ -269,3 +270,43 @@ def inference_fn(model, loader, output_root, list_classes, mc_samples, device,
         fig = uncertainty_curve(y_true=true_y, y_pred=pred_y, ent=pred_entropy)
         fig.savefig(join(next_folder, "uncertainty_curve.png"))
         plt.close()
+
+
+def show_results(path_lists, mc_wrapper, cam_wrapper, device):
+    output_images = []
+    transformations = get_validation_augmentations()
+    for img_path in path_lists:
+        image_copy = cv2.imread(img_path)
+        image = cv2.imread(img_path)[:, :, ::-1]
+        tensor = transformations(image=image)['image']
+        tensor = tensor.unsqueeze(0)
+
+        outputs = mc_wrapper(tensor.unsqueeze(0).to(device))
+        mean = np.mean(outputs, axis=1)
+        ent = predictive_entropy(mean)[0]
+
+        cam, idx = cam_wrapper(tensor.to(device))
+
+        heatmap = cv2.applyColorMap(
+            cv2.resize((cam.detach().cpu().squeeze().numpy() * 255).astype(np.uint8), (image.shape[1], image.shape[0])),
+            cv2.COLORMAP_JET)[:, :, ::-1]
+        result = heatmap * 0.4 + image * 0.9
+        map = result / np.max(result)
+
+        img_copy = cv2.putText(image_copy, f"Uncertainty: {ent:.2f}", (20, 130), cv2.FONT_HERSHEY_SIMPLEX, 5,
+                               (255, 255, 255), 8)
+        output_images.append(np.vstack([img_copy[:, :, ::-1], map * 255]))
+
+    im = np.concatenate((output_images[0],
+                         255 * np.ones((output_images[0].shape[0], 50, 3)),
+                         output_images[1],
+                         255 * np.ones((output_images[0].shape[0], 50, 3)),
+                         output_images[2],
+                         255 * np.ones((output_images[0].shape[0], 50, 3)),
+                         output_images[3],
+                         255 * np.ones((output_images[0].shape[0], 50, 3)),
+                         output_images[4],
+                         ),
+                         axis=1)
+
+    return img / 255
