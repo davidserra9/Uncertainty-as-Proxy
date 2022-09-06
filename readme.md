@@ -25,4 +25,15 @@ accuracy against the percentage of corrected samples ranked by uncertainty in de
 Furthermore, I propose two model wrappers to ease the computation of uncertainty estimations with MC dropout method and Class
 Activation Maps with a wide variety of techniques.
 
+### Requirements
+
+```
+git clone https://github.com/davidserra9/Uncertainty-as-Proxy.git
+cd Uncertainty-as-Proxy
+pip install -r requirements.txt
+```
+
+### Usage
+
+
 

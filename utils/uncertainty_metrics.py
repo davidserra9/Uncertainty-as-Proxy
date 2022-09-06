@@ -168,3 +168,23 @@ def uncertainty_curve(y_true, y_pred, **metrics):
     plt.legend(fontsize=12, fancybox=True, shadow=True)
 
     return plt.figure(1)
+
+def predictive_entropy(mean):
+    """ Function to compute the predictive entropy of the network
+
+        Parameters
+        ----------
+        mean : np.array
+            mean of the MC samples with shape (I, N, C)
+            I: total number of input annotations
+            N: number of images per annotation
+            C: number of classes
+
+        Return
+        ------
+        predictive_entropy : np.array
+            predictive entropy of the network with shape (I,)
+            I: total number of input annotations
+    """
+    epsilon = sys.float_info.min
+    return -np.sum(np.mean(mean, axis=1) * np.log(np.mean(mean, axis=1) + epsilon), axis=-1)
