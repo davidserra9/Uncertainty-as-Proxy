@@ -1,19 +1,28 @@
 ## Uncertainty as a Proxy of the Generalization Error for Marine Species Identification
+
 Repo still in progress...
 
 Thesis Dissertation at: [[here](imgs/TDM_David.pdf)]
 
-![example](imgs/echinaster.jpg)
-
+![example](imgs/example.jpg)
 
 ### Introduction
-Conservation of marine species is a must to control the levels of contamination and degradation of underwater ecosystems,
-which get worse every year. One of the best ways of monitoring aquatic ecosystems is by using a Remotely Operated Underwater
-Vehicle to collect images. However, the main drawback is the large amount of data that has to be annotated by specialists. In this
-thesis, we propose to go one step further and use a deep learning system which reports, in addition to the deterministic decision,
-uncertainty estimations to identify misclassifications. We test several well-known and a novel uncertainty metric which evaluates
-the quality of the estimations concerning their ordering. Furthermore, we also propose a novel protocol which helps reduce the
-workload of annotating images using the uncertainty as a proxy of the generalization error.
 
-In this repository, I propose two model wrappers to both compute uncertainty with MC dropout methods and Class Activation Maps with a wide variety of methods.
-Furthermore, the uncertainty metrics and plots can be found.
+Marine Protected Areas monitoring is a must to understand ecological processes and assess whether management aims are
+fulfilled. One of the best ways of doing it is by using a Remotely Operated Underwater Vehicle to collect images.
+However, the main drawback is the large amount of data that has to be annotated by specialists. In this thesis, we
+propose to go one step further and use a deep learning system to maximize the system's performance while reducing the
+human workload. The algorithm reports, in addition to the deterministic decision, uncertainty estimations to identify
+potential misclassifications. However, evaluating the model doubtfulness is not trivial and, therefore, we test several
+well-known and a novel metric which evaluates the quality of the estimations regarding its ranking. Furthermore, we
+propose a systematic method to reduce the workload from non-annotated datasets, using uncertainty as a proxy of the
+generalization error and automatically labelling with the model the most certain samples.
+
+In this repository, I implement several well-known uncertainty metrics and the novel Uncertainty Ordering Curve (UOC)
+which evaluates the uncertainty estimating regarding its ranking. UOC is a monotone increasing curve created by plotting the
+accuracy against the percentage of corrected samples ranked by uncertainty in descending order.
+
+Furthermore, I propose two model wrappers to ease the computation of uncertainty estimations with MC dropout method and Class
+Activation Maps with a wide variety of techniques.
+
+
