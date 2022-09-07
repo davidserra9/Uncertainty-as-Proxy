@@ -18,27 +18,36 @@ well-known and a novel metric which evaluates the quality of the estimations reg
 propose a systematic method to reduce the workload from non-annotated datasets, using uncertainty as a proxy of the
 generalization error and automatically labelling with the model the most certain samples.
 
-In this repository, I implement several well-known uncertainty metrics and the novel Uncertainty Ordering Curve (UOC)
+In this repository, we implement several well-known uncertainty metrics and the novel Uncertainty Ordering Curve (UOC)
 which evaluates the uncertainty estimating regarding its ranking. UOC is a monotone increasing curve created by plotting the
 accuracy against the percentage of corrected samples ranked by uncertainty in descending order.
 
-Furthermore, I propose two model wrappers to ease the computation of uncertainty estimations with MC dropout method and Class
+Furthermore, we propose two model wrappers to ease the computation of uncertainty estimations with MC dropout method and Class
 Activation Maps with a wide variety of techniques.
 
 ### Installation
 ```commandline
-git clone https://github.com/davidserra9/Uncertainty-as-Proxy.git
+git clone https://github.com/davidserra9/UncertaintyasProxy.git
 ```
 
 #### Requirements
-```
+```commandline
 cd Uncertainty-as-Proxy
 pip install -r requirements.txt
 ```
 
 #### Usage Examples
 
-- Estimate uncertainty and CAMs using the model wrappers.
+- Uncertainty estimation and CAMs on test images using the model wrappers ([notebook](examples/wrappers_inference.ipynb)).
+- Model and uncertainty evaluation on a trained model ([notebook](examples/evaluation.ipynb))
+
+### Citing the work
+If you find the paper useful in your research, please consider citing:
+
+```
+```
+
+
 
 
 
