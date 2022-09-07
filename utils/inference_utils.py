@@ -17,7 +17,6 @@ from tqdm import tqdm
 from utils.MCdropout_wrapper import MCDP_model
 from utils.config_parser import load_pickle, save_pickle
 from utils.uncertainty_metrics import uncertainty_box_plot, uncertainty_curve
-from utils.NN_utils import get_validation_augmentations
 
 def confusion_matrix_fn(loader, model, list_classes, device) -> plt.Figure:
     """ Function to compute and save the confusion matrix
