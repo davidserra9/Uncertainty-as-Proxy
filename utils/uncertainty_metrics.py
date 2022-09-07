@@ -164,7 +164,7 @@ def uncertainty_curve(y_true, y_pred, **metrics):
                  label=f"{name.replace('_', ' ').capitalize()} -   AUC: {au:.4f}\n"
                        f"{name.replace('_', ' ').capitalize()} - NAUC: {nau:.4f}")
 
-    plt.xlabel("Percentage of asked samples (%)")
+    plt.xlabel("Percentage of corrected samples (%)")
     plt.ylabel("Accuracy")
     plt.legend(fontsize=12, fancybox=True, shadow=True)
 
