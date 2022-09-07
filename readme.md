@@ -1,8 +1,6 @@
 ## Uncertainty as a Proxy of the Generalization Error for Marine Species Identification
 
-Repo still in progress...
-
-Thesis Dissertation at: [[here](imgs/TDM_David.pdf)]
+Thesis Dissertation at: [[here](imgs/UncertaintyProxy.pdf)]
 
 ![example](imgs/example.jpg)
 
