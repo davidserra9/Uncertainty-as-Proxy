@@ -51,7 +51,7 @@ def main():
     else:
         print('CAREFUL!! Training the model with CPU')
 
-    wandb.init(project="week4",
+    wandb.init(project="new-exp",
                entity="tfm",
                name=cfg.species_classification.model,
                config=dict(learning_rate=cfg.species_classification.learning_rate,
