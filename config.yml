@@ -1,8 +1,18 @@
 video_path: ""
 excels_path: ""
-species_dataset: "/media/david/media/TFM/dataset/images"
+icm_dataset_path: "/media/david/media/ICM20-1"
 output_path: "/media/david/media/TFM/experiments"
 model_path: "/media/david/media/TFM/models"
+
+wandb: false
+model: "efficientnet_b0"
+batch_size: 12
+num_epochs: 30
+learning_rate: 0.0005
+num_workers: 12
+load_model: false
+save_model: true
+pin_memory: true
 
 species: ["Spatangus purpureus",
           "Echinaster sepositus",
@@ -11,14 +21,3 @@ species: ["Spatangus purpureus",
           "Scyliorhinus canicula",
           "Ophiura ophiura",
           "Background"]
-
-species_classification:
-  model: "convnext_large"
-  batch_size: 12
-  num_epochs: 30
-  img_per_annot: 5
-  learning_rate: 0.0005
-  num_workers: 12
-  load_model: false
-  save_model: true
-  pin_memory: true

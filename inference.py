@@ -8,7 +8,7 @@ The outputs (confusion matrix, box plots, histograms and UOC) are saved in a fol
 from os.path import join
 from torch.utils.data import DataLoader
 from utils.NN_utils import initialize_model
-from utils.UW_dataset import UWDataset
+from utils.ICM_dataset import UWDataset
 from utils.config_parser import load_yml
 from utils.inference_utils import inference_fn
 

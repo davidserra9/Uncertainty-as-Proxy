@@ -36,7 +36,7 @@ import wandb
 import torch.optim as optim
 from torch.utils.data import DataLoader
 from utils.NN_utils import *
-from utils.UW_dataset import UWDataset
+from utils.ICM_dataset import ICMDataset
 from utils.config_parser import load_yml
 from utils.inference_utils import inference_fn
 
@@ -51,49 +51,51 @@ def main():
     else:
         print('CAREFUL!! Training the model with CPU')
 
-    wandb.init(project="new-exp",
-               entity="tfm",
-               name=cfg.species_classification.model,
-               config=dict(learning_rate=cfg.species_classification.learning_rate,
-                           architecture=cfg.species_classification.model,
-                           epochs=cfg.species_classification.num_epochs,
-                           batch_size=cfg.species_classification.batch_size,
-                           ))
+    if cfg.wandb:
+        wandb.init(project="new-exp",
+                   entity="tfm",
+                   name=cfg.model,
+                   config=dict(learning_rate=cfg.learning_rate,
+                               architecture=cfg.model,
+                               epochs=cfg.num_epochs,
+                               batch_size=cfg.batch_size,
+                               ))
 
     # Initialize the model
-    model = initialize_model(model_name=cfg.species_classification.model,
+    model = initialize_model(model_name=cfg.model,
                              num_classes=len(cfg.species),
-                             load_model=cfg.species_classification.load_model,
+                             load_model=cfg.load_model,
                              model_root=cfg.model_path)
     model.to(cfg.device)
 
     # Initialize optimizer, loss and scaler
     optimizer = optim.Adam(model.parameters(),
-                           lr=cfg.species_classification.learning_rate)  # Initialize the model
+                           lr=cfg.learning_rate)  # Initialize the model
+
     loss_fn = nn.CrossEntropyLoss()  # Initialize the loss
     scaler = torch.cuda.amp.GradScaler()  # Initialize the Scaler
 
     # Initialize datasets
-    train_dataset = UWDataset(split_list=[join(cfg.species_dataset, "train_images")],
-                              # join(cfg.species_dataset, "val_images")],
-                              list_classes=cfg.species,
-                              train=True,
-                              img_per_annot=cfg.species_classification.img_per_annot)
+    train_dataset = ICMDataset(dataset_path=cfg.icm_dataset_path,
+                               list_classes=cfg.species,
+                               train=True,
+                               locations=True)
 
-    test_dataset = UWDataset(split_list=[join(cfg.species_dataset, "test_images")],
-                             list_classes=cfg.species,
-                             train=False)
+    test_dataset = ICMDataset(dataset_path=cfg.icm_dataset_path,
+                              list_classes=cfg.species,
+                              train=False,
+                              locations=True)
 
     # Initialize dataloaders
     train_loader = DataLoader(train_dataset,
-                              batch_size=cfg.species_classification.batch_size,
-                              num_workers=cfg.species_classification.num_workers,
+                              batch_size=cfg.batch_size,
+                              num_workers=cfg.num_workers,
                               pin_memory=True,
                               shuffle=True)
 
     test_loader = DataLoader(test_dataset,
-                             batch_size=cfg.species_classification.batch_size,
-                             num_workers=cfg.species_classification.num_workers,
+                             batch_size=cfg.batch_size,
+                             num_workers=cfg.num_workers,
                              pin_memory=True)
 
     # Initialize the metrics dictionaries
@@ -107,7 +109,7 @@ def main():
     time.sleep(1)
 
     # Training loop
-    for epoch in range(cfg.species_classification.num_epochs):
+    for epoch in range(cfg.num_epochs):
 
         train_acc, train_loss = train_fn(train_loader, model, optimizer, loss_fn, scaler, cfg.device, epoch)  # Train
         train_metrics['accuracy'].append(train_acc)  # Append train accuracy
@@ -119,7 +121,7 @@ def main():
         test_metrics['f1'].append(test_f1)  # Append test f1 score
 
         # If the validation accuracy is the best one so far, save the model
-        if (test_f1 == max(test_metrics['f1'])) and cfg.species_classification.save_model:
+        if (test_f1 == max(test_metrics['f1'])) and cfg.save_model:
             save_model(model=model,
                        optimizer=optimizer,
                        num_epoch=epoch,
@@ -140,7 +142,7 @@ def main():
     print("----------- INFERENCE START --------------")
     print("")
 
-    model = initialize_model(model_name=cfg.species_classification.model,
+    model = initialize_model(model_name=cfg.model,
                              num_classes=len(cfg.species),
                              load_model=True,
                              model_root=cfg.model_path)
