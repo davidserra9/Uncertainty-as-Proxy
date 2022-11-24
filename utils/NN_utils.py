@@ -323,22 +323,9 @@ def eval_fn(loader, model, loss_fn, device, epoch_num):
     # Do not compute the gradients on evaluation
     with torch.no_grad():
         for idx, (data, targets) in enumerate(loop):
-            targets = targets.to(device)
+            data, targets = data.to(device), targets.to(device)
 
-            # If the data has 5 dimensions means that there is more than one image per annotation.
-            # Tensor([batch_size, num_images_per_annot, channels, height, width])
-            # The images have to be forwarded separately through the network
-            if len(data.shape) == 5:
-                # Separate the batches and forward them through the network obtaining num_images_per_annot tensors.
-                # Each position of the outputs correspond to the same annotation
-                outputs = torch.stack([model(data[:, i, :, :, :].to(device)) for i in range(data.shape[1])])
-
-                outputs = torch.mean(outputs, dim=0)
-
-            # If the data has 4 dimensions, standard procedure
-            # Tensor([batch_size, channels, height, width])
-            else:
-                outputs = model(data.to(device))
+            outputs = model(data)  # Forward pass
 
             loss = loss_fn(outputs, targets)  # Compute loss
 

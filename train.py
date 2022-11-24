@@ -79,12 +79,12 @@ def main():
     train_dataset = ICMDataset(dataset_path=cfg.icm_dataset_path,
                                list_classes=cfg.species,
                                train=True,
-                               locations=True)
+                               videos=True)
 
     test_dataset = ICMDataset(dataset_path=cfg.icm_dataset_path,
                               list_classes=cfg.species,
                               train=False,
-                              locations=True)
+                              videos=True)
 
     # Initialize dataloaders
     train_loader = DataLoader(train_dataset,
@@ -130,11 +130,12 @@ def main():
                        model_root=cfg.model_path)
 
         # Refresh wandb
-        wandb.log({"train_loss": train_loss,
-                   "train_accuracy": train_acc,
-                   "test_loss": test_loss,
-                   "test_accuracy": test_acc,
-                   "test_f1": test_f1})
+        if cfg.wandb:
+            wandb.log({"train_loss": train_loss,
+                       "train_accuracy": train_acc,
+                       "test_loss": test_loss,
+                       "test_accuracy": test_acc,
+                       "test_f1": test_f1})
 
     # Once the training has ended, run inference on the best weights
     print("")

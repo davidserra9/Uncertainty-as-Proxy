@@ -4,16 +4,6 @@ This module contains the UnderWater dataset class
 @author: David Serrano Lozano, @davidserra9
 """
 
-TRAINING_LOCATIONS = {"Spatangus purpureus": ["Cape Palos"],
-                      "Echinaster sepositus": ["Cape Palos"],
-                      "Cerianthus membranaceus": ["Cape Tiñoso"],
-                      "Bonellia viridis": ["Cape Palos"],
-                      "Scyliorhinus canicula": ["Cape Tiñoso"],
-                      "Ophiura ophiura": ["Blanes Deep"],
-                      "Background": ["Blanes Coast", "Cape Palos"]}
-
-TRAINING_VIDEOS = {}
-
 import cv2
 import torch
 import random
@@ -24,6 +14,18 @@ from beautifultable import BeautifulTable
 from torch.utils.data import Dataset
 from utils.NN_utils import get_training_augmentations, get_validation_augmentations
 from utils.config_parser import load_yml
+
+# Training annotations divided by location
+TRAINING_LOCATIONS = {"Spatangus purpureus": ["Cape Palos"],
+                      "Echinaster sepositus": ["Cape Palos"],
+                      "Cerianthus membranaceus": ["Cape Tiñoso"],
+                      "Bonellia viridis": ["Cape Palos"],
+                      "Scyliorhinus canicula": ["Cape Tiñoso"],
+                      "Ophiura ophiura": ["Blanes Deep"],
+                      "Background": ["Blanes Coast", "Cape Palos"]}
+
+# Training annotations divided by videos
+TRAINING_VIDEOS = [4, 8, 18, 20, 22, 23]
 
 class ICMDataset(Dataset):
     """ Custom dataset class for loading images and labels from a list of directories divided in splits """
@@ -61,10 +63,10 @@ class ICMDataset(Dataset):
             df = pd.concat(df_concat)
 
         elif videos and train:
-            print("TODO")
+            df = df[df['id_rov'].isin(TRAINING_VIDEOS)]
 
         elif videos and not train:
-            print("TODO")
+            df = df[~df['id_rov'].isin(TRAINING_VIDEOS)]
 
         else:
             raise ValueError("Wrong combination of parameters")
@@ -146,5 +148,5 @@ if __name__ == "__main__":
 
     cfg = load_yml("../config.yml")
 
-    dataset = ICMDataset(dataset_path=cfg["species_dataset"], train=True, list_classes=cfg.species, locations=True)
+    dataset = ICMDataset(dataset_path=cfg["species_dataset"], train=True, list_classes=cfg.species, videos=True)
     img, label = dataset[0]

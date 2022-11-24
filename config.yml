@@ -8,7 +8,7 @@ wandb: false
 model: "efficientnet_b0"
 batch_size: 12
 num_epochs: 30
-learning_rate: 0.0005
+learning_rate: 0.00001
 num_workers: 12
 load_model: false
 save_model: true
