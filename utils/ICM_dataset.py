@@ -30,7 +30,7 @@ TRAINING_VIDEOS = [4, 8, 18, 20, 22, 23]
 class ICMDataset(Dataset):
     """ Custom dataset class for loading images and labels from a list of directories divided in splits """
 
-    def __init__(self, dataset_path, list_classes, train, locations=False, videos=False):
+    def __init__(self, dataset_path, list_classes, train, locations=False, videos=False, remove_multiple=False):
 
         # Ensure correct flags
         if not locations and not videos:
@@ -71,7 +71,9 @@ class ICMDataset(Dataset):
         else:
             raise ValueError("Wrong combination of parameters")
 
-        df["annotation"].drop_duplicates().sort_values()  # Find the different species
+        if not remove_multiple:
+            # Keep only the rows with one 1 value
+            df = df[df[list_classes].eq(1).sum(axis=1) == 1]
 
         # Get all the images classified by species
         annot = {species: [] for species in df["annotation"].drop_duplicates().sort_values()}

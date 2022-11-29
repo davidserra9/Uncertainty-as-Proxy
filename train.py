@@ -52,8 +52,8 @@ def main():
         print('CAREFUL!! Training the model with CPU')
 
     if cfg.wandb:
-        wandb.init(project="new-exp",
-                   entity="tfm",
+        wandb.init(project="UncertaintyProxy",
+                   entity="davidserra9",
                    name=cfg.model,
                    config=dict(learning_rate=cfg.learning_rate,
                                architecture=cfg.model,
@@ -79,12 +79,14 @@ def main():
     train_dataset = ICMDataset(dataset_path=cfg.icm_dataset_path,
                                list_classes=cfg.species,
                                train=True,
-                               videos=True)
+                               videos=True,
+                               remove_multiple=True)
 
     test_dataset = ICMDataset(dataset_path=cfg.icm_dataset_path,
                               list_classes=cfg.species,
                               train=False,
-                              videos=True)
+                              videos=True,
+                              remove_multiple=True)
 
     # Initialize dataloaders
     train_loader = DataLoader(train_dataset,
