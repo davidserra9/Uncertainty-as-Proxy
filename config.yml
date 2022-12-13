@@ -1,17 +1,17 @@
 video_path: ""
 excels_path: ""
 icm_dataset_path: "/media/david/media/ICM20-1"
-output_path: "/media/david/media/TFM/experiments"
-model_path: "/media/david/media/TFM/models"
+output_path: "/media/david/media/Uncertainty/Experiments"
+model_path: "/media/david/media/Uncertainty/Models"
 
-wandb: false
+wandb: true
 model: "efficientnet_b0"
 batch_size: 12
-num_epochs: 30
+num_epochs: 100
 learning_rate: 0.00001
 num_workers: 12
-load_model: false
-save_model: true
+load_model: true
+save_model: false
 pin_memory: true
 
 species: ["Spatangus purpureus",

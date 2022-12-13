@@ -8,7 +8,7 @@ The outputs (confusion matrix, box plots, histograms and UOC) are saved in a fol
 from os.path import join
 from torch.utils.data import DataLoader
 from utils.NN_utils import initialize_model
-from utils.ICM_dataset import UWDataset
+from utils.ICM_dataset import ICMDataset
 from utils.config_parser import load_yml
 from utils.inference_utils import inference_fn
 
@@ -16,20 +16,22 @@ if __name__ == "__main__":
     cfg = load_yml("config.yml")
 
     # Initialize the model
-    model = initialize_model(model_name=cfg.species_classification.model,
+    model = initialize_model(model_name=cfg.model,
                              num_classes=len(cfg.species),
                              load_model=True,
                              model_root=cfg.model_path)
     model.to(cfg.device)
 
     # Initialize datasets
-    test_dataset = UWDataset(split_list=[join(cfg.species_dataset, "test_images")],
-                             list_classes=cfg.species,
-                             train=False)
+    test_dataset = ICMDataset(dataset_path=cfg.icm_dataset_path,
+                              list_classes=cfg.species,
+                              train=False,
+                              videos=True,
+                              remove_multiple=False)
 
     test_loader = DataLoader(test_dataset,
-                             batch_size=cfg.species_classification.batch_size,
-                             num_workers=cfg.species_classification.num_workers,
+                             batch_size=cfg.batch_size,
+                             num_workers=cfg.num_workers,
                              pin_memory=True)
 
     print("")
@@ -43,7 +45,5 @@ if __name__ == "__main__":
                  list_classes=cfg.species,
                  mc_samples=50,
                  device=cfg.device,
-                 cm=True,
-                 uncertainty=True,
-                 save=False,
-                 load=False)
+                 cm=False,
+                 uncertainty=True)

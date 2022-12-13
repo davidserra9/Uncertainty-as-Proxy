@@ -80,13 +80,13 @@ def main():
                                list_classes=cfg.species,
                                train=True,
                                videos=True,
-                               remove_multiple=True)
+                               remove_multiple=False)
 
     test_dataset = ICMDataset(dataset_path=cfg.icm_dataset_path,
                               list_classes=cfg.species,
                               train=False,
                               videos=True,
-                              remove_multiple=True)
+                              remove_multiple=False)
 
     # Initialize dataloaders
     train_loader = DataLoader(train_dataset,
@@ -157,7 +157,7 @@ def main():
                  list_classes=cfg.species,
                  mc_samples=50,
                  device=cfg.device,
-                 cm=True,
+                 cm=False,
                  uncertainty=True)
 
 
