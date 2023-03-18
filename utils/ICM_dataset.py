@@ -4,9 +4,11 @@ This module contains the UnderWater dataset class
 @author: David Serrano Lozano, @davidserra9
 """
 
+import os
 import cv2
 import torch
 import random
+import numpy as np
 import pandas as pd
 from glob import glob
 from os.path import join
@@ -30,80 +32,13 @@ TRAINING_VIDEOS = [4, 8, 18, 20, 22, 23]
 class ICMDataset(Dataset):
     """ Custom dataset class for loading images and labels from a list of directories divided in splits """
 
-    def __init__(self, dataset_path, list_classes, train, locations=False, videos=False, remove_multiple=False):
-
-        # Ensure correct flags
-        if not locations and not videos:
-            raise ValueError("At least one of the two parameters must be True")
-        elif locations and videos:
-            raise ValueError("Only one of the parameters locations and videos must be True")
-
-        random.seed(42)     # Set the seed for reproducibility
-        self.annotations = []   # Initialize the annotations list
-        self.transforms = get_training_augmentations() if train else get_validation_augmentations()  # transformations
-        self.train = train  # Set the train flag
-        self.list_classes = list_classes  # Set the list of classes flag
-        self.locations = locations  # Divide the dataset by locations
-        self.videos = videos  # Divide the dataset by videos
-
-        df = pd.read_csv(join(dataset_path, "dataset.csv"))  # Read the csv file
-
-        df_concat = []
-        # First, filter by species and, then, by location
-        if locations and train:
-            for species, locations in TRAINING_LOCATIONS.items():
-                df_temp = df[df['annotation'] == species]
-                df_concat.append(df_temp[df_temp['location'].isin(locations)])
-            df = pd.concat(df_concat)
-
-        elif locations and not train:
-            for species, locations in TRAINING_LOCATIONS.items():
-                df_temp = df[df['annotation'] == species]
-                df_concat.append(df_temp[~df_temp['location'].isin(locations)])
-            df = pd.concat(df_concat)
-
-        elif videos and train:
-            df = df[df['id_rov'].isin(TRAINING_VIDEOS)]
-
-        elif videos and not train:
-            df = df[~df['id_rov'].isin(TRAINING_VIDEOS)]
-
-        else:
-            raise ValueError("Wrong combination of parameters")
-
-        if not remove_multiple:
-            # Keep only the rows with one 1 value
-            df = df[df[list_classes].eq(1).sum(axis=1) == 1]
-
-        # Get all the images classified by species
-        annot = {species: [] for species in df["annotation"].drop_duplicates().sort_values()}
-        for key in annot.keys():
-            annot[key] = [f"{row['id_rov']:02}_{int(row['img_id']):04}.jpg" for _, row in df.loc[df['annotation'] == key].iterrows()]
-
-        # Perform over-sampling for the training set
-        if train:
-            max_rep = max([len(value) for value in annot.values()])
-
-            for label, annot_list in annot.items():
-                random.shuffle(annot_list)  # Shuffle the list of image paths
-                rep = max_rep // len(annot_list)  # Calculate the integer number of repetitions
-                rem = max_rep % len(annot_list)  # Calculate the remaining number of repetitions
-
-                for i in range(rep):
-                    self.annotations += [{'image_path': join(dataset_path, image_path),
-                                          'label': list_classes.index(label)} for image_path in annot_list]
-
-                self.annotations += [{'image_path': join(dataset_path, image_path),
-                                      'label': list_classes.index(label)} for image_path in annot_list[:rem]]
-
-        else:
-            for label, annot_list in annot.items():
-                self.annotations += [{'image_path': join(dataset_path, image_path),
-                                      'label': list_classes.index(label)} for image_path in annot_list]
-
-        # Print the final number of images for each class
-        print_dataset_stats(clss=list_classes,
-                            samples=[len([1 for dic in self.annotations if dic['label'] == i]) for i, _ in enumerate(list_classes)])
+    def __init__(self, path, transforms):
+        self.images = []
+        self.labels = []
+        self.transforms = transforms
+        for path in glob(join(path, "*")):
+            if os.path.isdir(path):
+                for path
 
     def __len__(self) -> int:
         """ Length of the dataset. """

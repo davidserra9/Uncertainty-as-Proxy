@@ -31,134 +31,74 @@ The training uses:
 @author: David Serrano Lozano, @davidserra9
 """
 
+import timm
 import time
 import wandb
 import torch.optim as optim
 from torch.utils.data import DataLoader
 from utils.NN_utils import *
-from utils.ICM_dataset import ICMDataset
+from src.ICM_dataset import ICMDataset
 from utils.config_parser import load_yml
 from utils.inference_utils import inference_fn
 
 def main():
-    """ Main function of the model (training and evaluation) """
-
-    cfg = load_yml("config.yml")
 
     # Find which device is used
-    if torch.cuda.is_available() and cfg.device == "cuda":
+    if torch.cuda.is_available():
         print(f'Training the model in {torch.cuda.get_device_name(torch.cuda.current_device())}')
     else:
         print('CAREFUL!! Training the model with CPU')
 
-    if cfg.wandb:
-        wandb.init(project="UncertaintyProxy",
-                   entity="davidserra9",
-                   name=cfg.model,
-                   config=dict(learning_rate=cfg.learning_rate,
-                               architecture=cfg.model,
-                               epochs=cfg.num_epochs,
-                               batch_size=cfg.batch_size,
-                               ))
+    # Load the model
+    model = timm.create_model("resnet50", pretrained=True, num_classes=6)
+    model = model.to("cuda")
 
-    # Initialize the model
-    model = initialize_model(model_name=cfg.model,
-                             num_classes=len(cfg.species),
-                             load_model=cfg.load_model,
-                             model_root=cfg.model_path)
-    model.to(cfg.device)
+    optimizer = optim.Adam(model.parameters(), lr=0.0001)  # Initialize the model
+    loss_fn = nn.CrossEntropyLoss()  # Initialize the loss function
+    scaler = torch.cuda.amp.GradScaler()  # Initialize the scaler
 
-    # Initialize optimizer, loss and scaler
-    optimizer = optim.Adam(model.parameters(),
-                           lr=cfg.learning_rate)  # Initialize the model
-
-    loss_fn = nn.CrossEntropyLoss()  # Initialize the loss
-    scaler = torch.cuda.amp.GradScaler()  # Initialize the Scaler
-
-    # Initialize datasets
-    train_dataset = ICMDataset(dataset_path=cfg.icm_dataset_path,
-                               list_classes=cfg.species,
+    train_dataset = ICMDataset(path="/media/david/media/TFM/article_dataset/train/",
                                train=True,
-                               videos=True,
-                               remove_multiple=False)
+                               oversample=True,
+                               species=["spatangus_purpureus",
+                                        "echinaster_sepositus",
+                                        "cerianthus_membranaceus",
+                                        "bonellia_viridis",
+                                        "scyliorhinus_canicula",
+                                        "ophiura_ophiura",
+                                        "background"])
 
-    test_dataset = ICMDataset(dataset_path=cfg.icm_dataset_path,
-                              list_classes=cfg.species,
+    test_dataset = ICMDataset(path="/media/david/media/TFM/article_dataset/test/",
                               train=False,
-                              videos=True,
-                              remove_multiple=False)
+                              oversample=False,
+                              species=["spatangus_purpureus",
+                                       "echinaster_sepositus",
+                                       "cerianthus_membranaceus",
+                                       "bonellia_viridis",
+                                       "scyliorhinus_canicula",
+                                       "ophiura_ophiura",
+                                       "background"])
 
-    # Initialize dataloaders
-    train_loader = DataLoader(train_dataset,
-                              batch_size=cfg.batch_size,
-                              num_workers=cfg.num_workers,
-                              pin_memory=True,
-                              shuffle=True)
-
-    test_loader = DataLoader(test_dataset,
-                             batch_size=cfg.batch_size,
-                             num_workers=cfg.num_workers,
-                             pin_memory=True)
+    train_loader = DataLoader(train_dataset, batch_size=16, shuffle=True, num_workers=4)
+    test_loader = DataLoader(test_dataset, batch_size=1, shuffle=False, num_workers=4)
 
     # Initialize the metrics dictionaries
     train_metrics = {'accuracy': [], 'loss': []}
     test_metrics = {'accuracy': [], 'loss': [], 'f1': []}
 
-    print("")
-    print("----------- MODEL: {} --------------".format(model.name))
-    print("----------- TRAINING START --------------")
-    print("")
-    time.sleep(1)
-
     # Training loop
-    for epoch in range(cfg.num_epochs):
+    for epoch in range(10):
 
-        train_acc, train_loss = train_fn(train_loader, model, optimizer, loss_fn, scaler, cfg.device, epoch)  # Train
+        train_acc, train_loss = train_fn(train_loader, model, optimizer, loss_fn, scaler, "cuda", epoch)  # Train
         train_metrics['accuracy'].append(train_acc)  # Append train accuracy
         train_metrics['loss'].append(train_loss)  # Append train accuracy
 
-        test_acc, test_loss, test_f1 = eval_fn(test_loader, model, loss_fn, cfg.device, epoch)  # Validate the model
+        test_acc, test_loss, test_f1 = eval_fn(test_loader, model, loss_fn, "cuda", epoch)  # Validate the model
         test_metrics['accuracy'].append(test_acc)  # Append test accuracy
         test_metrics['loss'].append(test_loss)  # Append test loss
         test_metrics['f1'].append(test_f1)  # Append test f1 score
 
-        # If the validation accuracy is the best one so far, save the model
-        if (test_f1 == max(test_metrics['f1'])) and cfg.save_model:
-            save_model(model=model,
-                       optimizer=optimizer,
-                       num_epoch=epoch,
-                       acc=test_acc,
-                       f1=test_f1,
-                       model_root=cfg.model_path)
-
-        # Refresh wandb
-        if cfg.wandb:
-            wandb.log({"train_loss": train_loss,
-                       "train_accuracy": train_acc,
-                       "test_loss": test_loss,
-                       "test_accuracy": test_acc,
-                       "test_f1": test_f1})
-
-    # Once the training has ended, run inference on the best weights
-    print("")
-    print("----------- MODEL: {} --------------".format(model.__class__.__name__))
-    print("----------- INFERENCE START --------------")
-    print("")
-
-    model = initialize_model(model_name=cfg.model,
-                             num_classes=len(cfg.species),
-                             load_model=True,
-                             model_root=cfg.model_path)
-    model.to(cfg.device)
-
-    inference_fn(model=model,
-                 loader=test_loader,
-                 output_root=cfg.output_path,
-                 list_classes=cfg.species,
-                 mc_samples=50,
-                 device=cfg.device,
-                 cm=False,
-                 uncertainty=True)
+        print(f'Epoch {epoch + 1}/{10} - Train accuracy: {train_acc:.2f} - Train loss: {train_loss:.2f} - Test accuracy: {test_acc:.2f} - Test loss: {test_loss:.2f} - Test f1: {test_f1:.2f}')
 
 
 if __name__ == '__main__':

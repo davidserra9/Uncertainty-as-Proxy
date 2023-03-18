@@ -31,7 +31,7 @@ class MCDP_model(object):
         self.dropout_rate = dropout_rate
         self.samples = mc_samples
         self.num_classes = num_classes
-        self.softmax = nn.Softmax(dim=2)
+        self.softmax = nn.Softmax(dim=1)
         self.device = device
 
         # VGG: dropout layer in train mode
@@ -107,9 +107,8 @@ class MCDP_model(object):
         Parameters
         ----------
         x : torch.Tensor
-            Input tensor with shape (B, N, C, H, W)
+            Input tensor with shape (B, C, H, W)
             B: batch size
-            N: number of images per annotation (could be 1 if 1 img/annot)
             C: number of channels
             H: height
             W: width
@@ -117,26 +116,22 @@ class MCDP_model(object):
         Return
         ------
         np.array
-            Array with shape (B, S, N, L)
+            Array with shape (B, S, L)
             B: batch size or number of images in the dataloader
             S: number of monte-carlo samples
-            N: number of images per annotation (could be 1 if 1 img/annot)
             L: number of classes
-            (If 1 image per annotation, then S = 1)
         """
 
-        dropout_predictions = np.empty((0, x.shape[0], x.shape[1], self.num_classes))
+        dropout_predictions = np.empty((0, x.shape[0], self.num_classes))
         for _ in range(self.samples):
             with torch.no_grad():
-                if len(x.shape) == 4:
-                    x = x.unsequeeze(1)
-
-                outputs = torch.stack([self.model(x[i, :, :, :, :].to(self.device)) for i in range(x.shape[0])])
+                outputs = self.model(x)
+                # outputs = torch.stack([self.model(x[i, :, :, :, :].to(self.device)) for i in range(x.shape[0])])
                 outputs = self.softmax(outputs)
 
             dropout_predictions = np.vstack((dropout_predictions, outputs.cpu().numpy()[np.newaxis, :, :]))
 
-        return dropout_predictions.transpose(1, 0, 2, 3)
+        return dropout_predictions.transpose(1, 0, 2)
 
     def __call__(self, x):
         return self.forward(x)

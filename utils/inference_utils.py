@@ -132,9 +132,8 @@ def predictive_entropy(mean):
         Parameters
         ----------
         mean : np.array
-            mean of the MC samples with shape (I, N, C)
+            mean of the MC samples with shape (I, C)
             I: total number of input annotations
-            N: number of images per annotation
             C: number of classes
 
         Return
@@ -144,7 +143,7 @@ def predictive_entropy(mean):
             I: total number of input annotations
     """
     epsilon = sys.float_info.min
-    return -np.sum(np.mean(mean, axis=1) * np.log(np.mean(mean, axis=1) + epsilon), axis=-1)
+    return -np.sum(mean * np.log(mean + epsilon), axis=-1)
 
 
 def bhattacharyya_coefficient(dropout_predictions):
@@ -165,13 +164,13 @@ def bhattacharyya_coefficient(dropout_predictions):
         return np.histogram(a, bins=[i * 0.05 for i in range(0, 21)])[0]
 
     # First, obtain the two classes with the highest predictive mean along all the images from the same
-    mean = np.mean(np.mean(dropout_predictions, axis=1), axis=1)  # MC samples and images/annot mean: shape (I, C)
+    mean = np.mean(dropout_predictions, axis=1)  # MC samples and images/annot mean: shape (I, C)
     clss1 = mean.argsort(axis=-1)[:, -1]  # class with the highest predictive mean: shape (I,)
     clss2 = mean.argsort(axis=-1)[:, -2]  # class with the second highest predictive mean (I,)
 
     # Compute the histograms of the top-2 classes for each annotation (I, bins=100)
-    hist1 = np.apply_along_axis(hist_1d, axis=1, arr=np.mean(dropout_predictions, axis=2)[range(len(clss1)), :, clss1])
-    hist2 = np.apply_along_axis(hist_1d, axis=1, arr=np.mean(dropout_predictions, axis=2)[range(len(clss2)), :, clss2])
+    hist1 = np.apply_along_axis(hist_1d, axis=1, arr=np.mean(dropout_predictions, axis=1)[:, clss1])
+    hist2 = np.apply_along_axis(hist_1d, axis=1, arr=np.mean(dropout_predictions, axis=1)[:, clss2])
 
     # Compute the Bhattacharyya coefficient for each annotation (I,)
     return np.sum(np.sqrt(hist1 * hist2), axis=1)
@@ -239,7 +238,7 @@ def inference_fn(model, loader, output_root, list_classes, mc_samples, device,
                                     device=device,
                                     mc_samples=mc_samples)
 
-            dropout_predictions = np.empty((0, mc_samples, next(iter(loader))[0].shape[1], len(list_classes)))
+            dropout_predictions = np.empty((0, mc_samples, len(list_classes)))
             true_y = np.array([], dtype=np.uint8)
 
             # Iterate over the loader and stack all the batches predictions
@@ -257,8 +256,8 @@ def inference_fn(model, loader, output_root, list_classes, mc_samples, device,
         mean = np.mean(dropout_predictions, axis=1)
         std = np.std(dropout_predictions, axis=1)
 
-        pred_y = mean.max(axis=1).argmax(axis=-1)
-        pred_std = std[np.arange(mean.shape[0]), mean.max(axis=2).argmax(axis=-1), mean.max(axis=1).argmax(axis=-1)]
+        pred_y = mean.argmax(axis=-1)
+        pred_std = std[np.arange(mean.shape[0]), mean.argmax(axis=-1)]
         pred_entropy = predictive_entropy(mean)
         pred_bc = bhattacharyya_coefficient(dropout_predictions)
 
