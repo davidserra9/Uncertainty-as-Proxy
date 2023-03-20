@@ -12,7 +12,7 @@ import random
 class ICMDataset(Dataset):
     """ Custom dataset class for loading images and labels from a list of directories divided in splits """
 
-    def __init__(self, path, train, oversample, species):
+    def __init__(self, path, train, species, oversample=False):
         self.images = []
         self.labels = []
         self.train = train
@@ -124,20 +124,3 @@ def get_validation_augmentations():
         ToTensorV2(),
     ]
     return A.Compose(val_transforms)
-
-dataset = ICMDataset(path="/media/david/media/TFM/article_dataset/train/",
-                     train=True,
-                     oversample=False,
-                     species=["spatangus_purpureus",
-                              "echinaster_sepositus",
-                              "cerianthus_membranaceus",
-                              "bonellia_viridis",
-                              "scyliorhinus_canicula",
-                              "ophiura_ophiura",
-                              "background"])
-
-image, label = dataset[0]
-
-print(image.shape)
-print(label)
-

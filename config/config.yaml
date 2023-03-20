@@ -1,0 +1,3 @@
+defaults:
+  - paths: home
+  - training: efficientnet_b0

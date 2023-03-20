@@ -32,74 +32,63 @@ The training uses:
 """
 
 import timm
-import time
-import wandb
 import torch.optim as optim
 from torch.utils.data import DataLoader
 from utils.NN_utils import *
 from src.ICM_dataset import ICMDataset
-from utils.config_parser import load_yml
-from utils.inference_utils import inference_fn
+import hydra
+from omegaconf import DictConfig, OmegaConf
+from src.logging import logger
+from src.training import fit
+from datetime import datetime
+import wandb
 
-def main():
+@hydra.main(config_path="config", config_name="config", version_base="1.3")
+def train(cfg: DictConfig) -> None:
 
     # Find which device is used
-    if torch.cuda.is_available():
-        print(f'Training the model in {torch.cuda.get_device_name(torch.cuda.current_device())}')
+    if torch.cuda.is_available() and cfg.paths.device == "cuda":
+        logger.info(f'Training the model in {torch.cuda.get_device_name(torch.cuda.current_device())}')
     else:
-        print('CAREFUL!! Training the model with CPU')
+        logger.warn('CAREFUL!! Training the model with CPU')
 
-    # Load the model
-    model = timm.create_model("resnet50", pretrained=True, num_classes=6)
+    if "wandb" in OmegaConf.to_container(cfg.paths):
+        wandb.init(**cfg.paths.wandb.params,
+                   name=cfg.training.encoder.name + datetime.now().strftime("%Y-%m-%d_%H:%M:%S"),
+                   config=OmegaConf.to_container(cfg.training))
+
+    # Create the model
+    model = timm.create_model(cfg.training.encoder.name, **cfg.training.encoder.params)
     model = model.to("cuda")
 
-    optimizer = optim.Adam(model.parameters(), lr=0.0001)  # Initialize the model
-    loss_fn = nn.CrossEntropyLoss()  # Initialize the loss function
-    scaler = torch.cuda.amp.GradScaler()  # Initialize the scaler
+    criterion = getattr(nn, cfg.training.loss)()
+    optimizer = getattr(optim, cfg.training.optimizer.name)(model.parameters(), **cfg.training.optimizer.params)
+    scheduler = getattr(torch.optim.lr_scheduler, cfg.training.scheduler.name)(optimizer,
+                                                                               lr_lambda=lambda epoch: cfg.training.scheduler.params.lr_lambda ** epoch)
 
-    train_dataset = ICMDataset(path="/media/david/media/TFM/article_dataset/train/",
+    train_dataset = ICMDataset(path=join(cfg.paths.dataset, "train"),
                                train=True,
-                               oversample=True,
-                               species=["spatangus_purpureus",
-                                        "echinaster_sepositus",
-                                        "cerianthus_membranaceus",
-                                        "bonellia_viridis",
-                                        "scyliorhinus_canicula",
-                                        "ophiura_ophiura",
-                                        "background"])
+                               oversample=cfg.training.oversample,
+                               species=cfg.paths.classes)
 
-    test_dataset = ICMDataset(path="/media/david/media/TFM/article_dataset/test/",
+    valid_dataset = ICMDataset(path=join(cfg.paths.dataset, "valid"),
                               train=False,
-                              oversample=False,
-                              species=["spatangus_purpureus",
-                                       "echinaster_sepositus",
-                                       "cerianthus_membranaceus",
-                                       "bonellia_viridis",
-                                       "scyliorhinus_canicula",
-                                       "ophiura_ophiura",
-                                       "background"])
+                              species=cfg.paths.classes)
 
-    train_loader = DataLoader(train_dataset, batch_size=16, shuffle=True, num_workers=4)
-    test_loader = DataLoader(test_dataset, batch_size=1, shuffle=False, num_workers=4)
+    train_loader = DataLoader(train_dataset, **cfg.training.train_dataloader)
+    valid_loader = DataLoader(valid_dataset, **cfg.training.valid_dataloader)
 
-    # Initialize the metrics dictionaries
-    train_metrics = {'accuracy': [], 'loss': []}
-    test_metrics = {'accuracy': [], 'loss': [], 'f1': []}
-
-    # Training loop
-    for epoch in range(10):
-
-        train_acc, train_loss = train_fn(train_loader, model, optimizer, loss_fn, scaler, "cuda", epoch)  # Train
-        train_metrics['accuracy'].append(train_acc)  # Append train accuracy
-        train_metrics['loss'].append(train_loss)  # Append train accuracy
-
-        test_acc, test_loss, test_f1 = eval_fn(test_loader, model, loss_fn, "cuda", epoch)  # Validate the model
-        test_metrics['accuracy'].append(test_acc)  # Append test accuracy
-        test_metrics['loss'].append(test_loss)  # Append test loss
-        test_metrics['f1'].append(test_f1)  # Append test f1 score
-
-        print(f'Epoch {epoch + 1}/{10} - Train accuracy: {train_acc:.2f} - Train loss: {train_loss:.2f} - Test accuracy: {test_acc:.2f} - Test loss: {test_loss:.2f} - Test f1: {test_f1:.2f}')
+    fit(model,
+        train_loader,
+        valid_loader,
+        criterion,
+        optimizer,
+        scheduler,
+        cfg.training.epochs,
+        "wandb" in OmegaConf.to_container(cfg.paths),
+        cfg.training.log_step,
+        cfg.paths.device)
 
 
 if __name__ == '__main__':
-    main()
+    train()

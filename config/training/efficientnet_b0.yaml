@@ -1,0 +1,29 @@
+encoder:
+  name: "efficientnet_b0"
+  params:
+    pretrained: true
+    num_classes: 7
+loss: "CrossEntropyLoss"
+optimizer:
+  name: "Adam"
+  params:
+    lr: 0.001
+    weight_decay: 0.0001
+scheduler:
+  name: "LambdaLR"
+  params:
+    lr_lambda: 0.65
+oversample: True
+epochs: 15
+train_dataloader:
+  batch_size: 16
+  num_workers: 4
+  shuffle: True
+valid_dataloader:
+  batch_size: 1
+  num_workers: 4
+  shuffle: False
+log_step: 100
+
+
+
