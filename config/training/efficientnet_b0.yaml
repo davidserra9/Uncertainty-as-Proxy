@@ -23,7 +23,7 @@ valid_dataloader:
   batch_size: 1
   num_workers: 4
   shuffle: False
-log_step: 100
+log_step: 10
 
 
 

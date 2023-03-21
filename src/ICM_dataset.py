@@ -52,8 +52,6 @@ class ICMDataset(Dataset):
                             if annot_counter == max_annotations:
                                 break
 
-        print()
-
     def __len__(self) -> int:
         """ Length of the dataset. """
         return len(self.images)

@@ -76,6 +76,11 @@ def train(cfg: DictConfig) -> None:
                               species=cfg.paths.classes)
 
     train_loader = DataLoader(train_dataset, **cfg.training.train_dataloader)
+
+    if cfg.training.valid_dataloader.batch_size != 1:
+        logger.error("The validation batch size must be 1")
+        raise ValueError("The validation batch size must be 1")
+
     valid_loader = DataLoader(valid_dataset, **cfg.training.valid_dataloader)
 
     fit(model,
@@ -87,6 +92,7 @@ def train(cfg: DictConfig) -> None:
         cfg.training.epochs,
         "wandb" in OmegaConf.to_container(cfg.paths),
         cfg.training.log_step,
+        cfg.paths.classes,
         cfg.paths.device)
 
 
