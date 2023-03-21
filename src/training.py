@@ -3,6 +3,41 @@ import wandb
 import numpy as np
 from tqdm import tqdm
 from src.metrics import compute_metrics
+from src.logging import logger
+
+def get_optimizer(model, cfg):
+    if cfg.name == "sgd":
+        # lr, wegith_decay, momentum
+        optimizer = torch.optim.SGD(model.parameters(), **cfg.params)
+        logger.info(f"Using SGD optimizer w/ {cfg.params}")
+    elif cfg.name == "adam":
+        # lr, weight_decay
+        optimizer = torch.optim.Adam(model.parameters(), **cfg.parms)
+        logger.info(f"Using ADAM optimizer w/ {cfg.params}")
+
+    else:
+        logger.error("Optimizer not implemented")
+        raise ValueError("Optimizer not implemented")
+
+    return optimizer
+
+def get_scheduler(optimizer, cfg):
+    if cfg.name == "ExponentialLR":
+        # gamma
+        scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer, **cfg.params)
+        logger.info(f"Using ExponentialLR scheduler w/ {cfg.params}")
+    elif cfg.name == "CosineAnnealingLR":
+        # T_max, eta_min
+        scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, **cfg.params)
+        logger.info(f"Using CosineAnnealingLR scheduler w/ {cfg.params}")
+    elif cfg.name == "LambdaLR":
+        # lr_lambda
+        scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda=lambda epoch: cfg.params.lr_lambda ** epoch)
+        logger.info(f"Using LambdaLR scheduler w/ {cfg.params}")
+    else:
+        logger.error(f"{cfg.name} scheduler not implemented")
+        raise ValueError("Scheduler not implemented")
+    return scheduler
 
 def train_epoch(model, train_loader, criterion, optimizer, scheduler, log_step, epoch, wb_log, device):
     model.train()

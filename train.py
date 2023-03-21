@@ -31,15 +31,14 @@ The training uses:
 @author: David Serrano Lozano, @davidserra9
 """
 
-import timm
-import torch.optim as optim
 from torch.utils.data import DataLoader
 from utils.NN_utils import *
 from src.ICM_dataset import ICMDataset
 import hydra
 from omegaconf import DictConfig, OmegaConf
 from src.logging import logger
-from src.training import fit
+from src.training import fit, get_optimizer, get_scheduler
+from src.models import get_model
 from datetime import datetime
 import wandb
 
@@ -58,13 +57,12 @@ def train(cfg: DictConfig) -> None:
                    config=OmegaConf.to_container(cfg.training))
 
     # Create the model
-    model = timm.create_model(cfg.training.encoder.name, **cfg.training.encoder.params)
+    model = get_model(cfg.training.encoder)
     model = model.to("cuda")
 
     criterion = getattr(nn, cfg.training.loss)()
-    optimizer = getattr(optim, cfg.training.optimizer.name)(model.parameters(), **cfg.training.optimizer.params)
-    scheduler = getattr(torch.optim.lr_scheduler, cfg.training.scheduler.name)(optimizer,
-                                                                               lr_lambda=lambda epoch: cfg.training.scheduler.params.lr_lambda ** epoch)
+    optimizer = get_optimizer(model, cfg.training.optimizer)
+    scheduler = get_scheduler(optimizer, cfg.training.scheduler)
 
     train_dataset = ICMDataset(path=join(cfg.paths.dataset, "train"),
                                train=True,
@@ -94,7 +92,6 @@ def train(cfg: DictConfig) -> None:
         cfg.training.log_step,
         cfg.paths.classes,
         cfg.paths.device)
-
 
 if __name__ == '__main__':
     train()
