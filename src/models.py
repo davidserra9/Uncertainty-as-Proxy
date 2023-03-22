@@ -21,15 +21,15 @@ def get_model(cfg):
     elif "efficientnet_v2_" in cfg.name:
         model = getattr(models, cfg.name)(weights=cfg.params.pretrained)
 
-        model_ftrs = model.classifier.in_features
+        model_ftrs = model.classifier[-1].in_features
         model.classifier[-1] = nn.Linear(model_ftrs, cfg.params.num_classes)
         model.name = cfg.name
 
     elif "convnext" in cfg.name:
         model = getattr(models, cfg.name)(weights=cfg.params.pretrained)
 
-        model_ftrs = model.classifier.in_features
-        model.classifier[-1] = nn.Linear(model_ftrs, cfg.params.num_classes)
+        model_ftrs = model.classifier[-1].in_features
+        model.fc[-1] = nn.Linear(model_ftrs, cfg.params.num_classes)
         model.name = cfg.name
 
     else:
@@ -51,3 +51,4 @@ def save_model(model, optimizer, num_epoch, acc, f1, path):
     }
 
     torch.save(checkpoint, path)
+
