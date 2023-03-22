@@ -1,5 +1,5 @@
 dataset: "/home/dserrano/shared/article_dataset"
-models: "/home/dserrano/shared/weights/TFM"
+models: "/home/dserrano/shared/weights"
 device: "cuda"
 classes: ["spatangus_purpureus",
           "echinaster_sepositus",
