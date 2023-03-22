@@ -29,7 +29,7 @@ def get_model(cfg):
         model = getattr(models, cfg.name)(weights=cfg.params.pretrained)
 
         model_ftrs = model.classifier[-1].in_features
-        model.fc[-1] = nn.Linear(model_ftrs, cfg.params.num_classes)
+        model.classifier[-1] = nn.Linear(model_ftrs, cfg.params.num_classes)
         model.name = cfg.name
 
     else:
