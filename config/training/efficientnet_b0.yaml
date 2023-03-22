@@ -10,7 +10,7 @@ optimizer:
     lr: 0.001
     weight_decay: 0.0001
 scheduler:
-  name: "LambdaLR"
+  name: none
   params:
     lr_lambda: 0.65
 oversample: True

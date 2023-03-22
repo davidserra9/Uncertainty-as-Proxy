@@ -52,10 +52,15 @@ def train(cfg: DictConfig) -> None:
         logger.warn('CAREFUL!! Training the model with CPU')
 
     if "wandb" in OmegaConf.to_container(cfg.paths):
-        wandb.init(**cfg.paths.wandb.params,
-                   name=cfg.training.encoder.name + datetime.now().strftime("%Y-%m-%d_%H:%M:%S"),
+        num_exp = len(wandb.Api().runs(cfg.paths.wandb.params.project))
+        wandb.init(project=cfg.paths.wandb.params.project,
+                   entity=cfg.paths.wandb.params.entity,
+                   name=f"{cfg.training.encoder.name}_{num_exp:02}",
                    config=OmegaConf.to_container(cfg.training))
 
+    # Obtain the name of the wandb run
+    if "wandb" in OmegaConf.to_container(cfg.paths):
+        wandb_run_name = wandb.run.name
     # Create the model
     model = get_model(cfg.training.encoder)
     model = model.to("cuda")
@@ -91,6 +96,7 @@ def train(cfg: DictConfig) -> None:
         "wandb" in OmegaConf.to_container(cfg.paths),
         cfg.training.log_step,
         cfg.paths.classes,
+        cfg.paths.models,
         cfg.paths.device)
 
 if __name__ == '__main__':
