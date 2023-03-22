@@ -128,9 +128,9 @@ def fit(model, train_loader, valid_loader, criterion, optimizer, scheduler, epoc
 
         logger.info(msg)
 
-        if wb_log:
-            wandb.summary["best_acc"] = max_acc
-            wandb.summary["best_f1"] = max_f1
+    if wb_log:
+        wandb.summary["best_acc"] = max_acc
+        wandb.summary["best_f1"] = max_f1
 
 
 

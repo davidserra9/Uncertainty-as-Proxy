@@ -28,7 +28,7 @@ def get_model(cfg):
     elif "convnext" in cfg.name:
         model = getattr(models, cfg.name)(weights=cfg.params.pretrained)
 
-        model_ftrs = model.fc.in_features
+        model_ftrs = model.classifier.in_features
         model.classifier[-1] = nn.Linear(model_ftrs, cfg.params.num_classes)
         model.name = cfg.name
 
