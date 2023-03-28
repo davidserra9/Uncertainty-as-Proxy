@@ -37,9 +37,8 @@ def get_model(cfg):
 
     return model
 
-def load_model():
-    #TODO: load model from checkpoint
-    pass
+def load_model(model, path):
+    return model.load_state_dict(torch.load(path)["state_dict"])
 
 def save_model(model, optimizer, num_epoch, acc, f1, path):
     checkpoint = {

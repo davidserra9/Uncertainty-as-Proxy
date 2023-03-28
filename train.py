@@ -30,7 +30,7 @@ The training uses:
 
 @author: David Serrano Lozano, @davidserra9
 """
-
+import torch
 from torch.utils.data import DataLoader
 from utils.NN_utils import *
 from src.ICM_dataset import ICMDataset
@@ -38,7 +38,7 @@ import hydra
 from omegaconf import DictConfig, OmegaConf
 from src.logging import logger
 from src.training import fit, get_optimizer, get_scheduler
-from src.models import get_model
+from src.models import get_model, load_model
 from datetime import datetime
 import wandb
 
