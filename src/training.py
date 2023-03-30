@@ -6,8 +6,9 @@ from tqdm import tqdm
 from glob import glob
 from os.path import join
 from src.models import save_model
-from src.metrics import compute_metrics
+from src.metrics import compute_metrics, predictive_entropy, uncertainty_box_plot, uncertainty_curve
 from src.logging import logger
+from src.MC_wrapper import MCWrapper
 
 def get_optimizer(model, cfg):
     if cfg.name.lower() == "sgd":
@@ -132,7 +133,32 @@ def fit(model, train_loader, valid_loader, criterion, optimizer, scheduler, epoc
         wandb.summary["best_acc"] = max_acc
         wandb.summary["best_f1"] = max_f1
 
+def eval_uncertainty_model(model, eval_loader, mc_samples, dropout_rate, num_classes, wb_log, device):
+        mc_wrapper = MCWrapper(model, num_classes=num_classes, mc_samples=mc_samples, dropout_rate=dropout_rate)
 
+        dropout_predictions = np.empty((0, next(iter(eval_loader))[0].shape[1], mc_samples, num_classes))
+        true_y = np.array([], dtype=np.uint8)
 
+        # Iterate over the loader and stack all the batches predictions
+        for (batch, target) in tqdm(eval_loader, desc="Uncertainty with MC Dropout", leave=False):
+            batch, target = batch.to(device), target.to(device)
+            for b in batch:
+                outputs = mc_wrapper(b)
+                dropout_predictions = np.vstack((dropout_predictions, outputs[np.newaxis, :, :]))
+                true_y = np.append(true_y, target.cpu().numpy())
+
+        mean = np.mean(dropout_predictions, axis=1)
+
+        pred_y = mean.max(axis=1).argmax(axis=-1)
+        pred_entropy = predictive_entropy(mean)
+
+        box_plot = uncertainty_box_plot(y_true=true_y, y_pred=pred_y, entropy=pred_entropy)
+        curve, au, nau = uncertainty_curve(y_true=true_y, y_pred=pred_y, ent=pred_entropy)
+
+        if wb_log:
+            wandb.log({"eval/box_plot": wandb.Image(box_plot),
+                       "eval/curve": wandb.Image(curve)})
+            wandb.summary["eval/au"] = au
+            wandb.summary["eval/nau"] = nau
 
 

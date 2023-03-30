@@ -37,12 +37,11 @@ from src.ICM_dataset import ICMDataset
 import hydra
 from omegaconf import DictConfig, OmegaConf
 from src.logging import logger
-from src.training import fit, get_optimizer, get_scheduler
+from src.training import fit, get_optimizer, get_scheduler, eval_uncertainty_model
 from src.models import get_model, load_model
-from datetime import datetime
+from src.MC_wrapper import MCWrapper
 import wandb
 
-@hydra.main(config_path="config", config_name="config", version_base="1.3")
 def train(cfg: DictConfig) -> None:
 
     # Find which device is used
@@ -61,6 +60,7 @@ def train(cfg: DictConfig) -> None:
     # Obtain the name of the wandb run
     if "wandb" in OmegaConf.to_container(cfg.paths):
         wandb_run_name = wandb.run.name
+
     # Create the model
     model = get_model(cfg.training.encoder)
     model = model.to("cuda")
@@ -75,8 +75,8 @@ def train(cfg: DictConfig) -> None:
                                species=cfg.paths.classes)
 
     valid_dataset = ICMDataset(path=join(cfg.paths.dataset, "valid"),
-                              train=False,
-                              species=cfg.paths.classes)
+                               train=False,
+                               species=cfg.paths.classes)
 
     train_loader = DataLoader(train_dataset, **cfg.training.train_dataloader)
 
@@ -99,5 +99,33 @@ def train(cfg: DictConfig) -> None:
         cfg.paths.models,
         cfg.paths.device)
 
+    # Load the best model
+    if "wandb" in OmegaConf.to_container(cfg.paths):
+        model_path = join(cfg.paths.models, f"{wandb.run.name}.pth")
+    else:
+        model_path = join(cfg.paths.models, f"{model.name}.pth")
+
+    load_model(model, join(cfg.paths.models, model_path))
+
+    # Create the test dataset and dataloader
+    eval_loader = ICMDataset(path=join(cfg.paths.dataset, "test"),
+                             train=False,
+                             species=cfg.paths.classes)
+
+    eval_loader = DataLoader(eval_loader, **cfg.uncertainty.eval_dataloader)
+
+    # Create the MC Wrapper
+    mc_wrapper = MCWrapper(model, cfg.uncertainty.mc_samples, cfg.paths.device)
+
+    eval_uncertainty_model(mc_wrapper,
+                           eval_loader,
+                           cfg.uncertainty.mc_samples,
+                           cfg.uncertainty.dropout_rate,
+                           len(cfg.paths.classes),
+                           "wandb" in OmegaConf.to_container(cfg.paths),
+                           cfg.paths.device)
+@hydra.main(config_path="config", config_name="config", version_base="1.3")
+def run_training(cfg: DictConfig) -> None:
+    train(cfg)
 if __name__ == '__main__':
     train()

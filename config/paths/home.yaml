@@ -1,4 +1,4 @@
-dataset: "/media/david/media/TFM/article_dataset"
+dataset: "/media/david/media/TFM/article_dataset_v2"
 models: "/home/david/Workspace/weights"
 device: "cuda"
 classes: ["spatangus_purpureus",
