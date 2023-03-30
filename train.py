@@ -42,6 +42,7 @@ from src.models import get_model, load_model
 from src.MC_wrapper import MCWrapper
 import wandb
 
+@hydra.main(config_path="config", config_name="config", version_base="1.3")
 def train(cfg: DictConfig) -> None:
 
     # Find which device is used
@@ -124,8 +125,6 @@ def train(cfg: DictConfig) -> None:
                            len(cfg.paths.classes),
                            "wandb" in OmegaConf.to_container(cfg.paths),
                            cfg.paths.device)
-@hydra.main(config_path="config", config_name="config", version_base="1.3")
-def run_training(cfg: DictConfig) -> None:
-    train(cfg)
+
 if __name__ == '__main__':
     train()
