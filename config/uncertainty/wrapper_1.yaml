@@ -1,0 +1,15 @@
+encoder:
+  name: "efficientnet_b0"
+  params:
+    num_classes: 7
+    model_path: "efficientnet_b0_25.pth"
+
+eval_dataloader:
+  batch_size: 1
+  num_workers: 4
+  shuffle: False
+
+mc_samples: 25
+dropout_rate: 0.25
+metrics:
+  - "predictive_entropy"
