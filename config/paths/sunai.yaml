@@ -1,4 +1,4 @@
-dataset: "/home/dserrano/shared/article_dataset"
+dataset: "/home/dserrano/shared/article_dataset_v2"
 models: "/home/dserrano/shared/weights"
 device: "cuda"
 classes: ["spatangus_purpureus",
