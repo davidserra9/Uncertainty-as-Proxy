@@ -11,5 +11,5 @@ eval_dataloader:
 
 mc_samples: 25
 dropout_rate: 0.25
-metrics:
-  - "predictive_entropy"
+num_images_wandb: 5
+activation_map: "CAM"

@@ -37,9 +37,8 @@ from src.ICM_dataset import ICMDataset
 import hydra
 from omegaconf import DictConfig, OmegaConf
 from src.logging import logger
-from src.training import fit, get_optimizer, get_scheduler, eval_uncertainty_model
+from src.training import fit, get_optimizer, get_scheduler, eval_uncertainty_model, inference_images
 from src.models import get_model, load_model
-from src.MC_wrapper import MCWrapper
 import wandb
 
 @hydra.main(config_path="config", config_name="config", version_base="1.3")
@@ -87,18 +86,18 @@ def train(cfg: DictConfig) -> None:
 
     valid_loader = DataLoader(valid_dataset, **cfg.training.valid_dataloader)
 
-    fit(model,
-        train_loader,
-        valid_loader,
-        criterion,
-        optimizer,
-        scheduler,
-        cfg.training.epochs,
-        "wandb" in OmegaConf.to_container(cfg.paths),
-        cfg.training.log_step,
-        cfg.paths.classes,
-        cfg.paths.models,
-        cfg.paths.device)
+    fit(model=model,
+        train_loader=train_loader,
+        valid_loader=valid_loader,
+        criterion=criterion,
+        optimizer=optimizer,
+        scheduler=scheduler,
+        epochs=cfg.training.epochs,
+        wb_log="wandb" in OmegaConf.to_container(cfg.paths),
+        log_step=cfg.training.log_step,
+        cls_names=cfg.paths.classes,
+        output_path=cfg.paths.models,
+        device=cfg.paths.device)
 
     # Load the best model
     if "wandb" in OmegaConf.to_container(cfg.paths):
@@ -115,16 +114,23 @@ def train(cfg: DictConfig) -> None:
 
     eval_loader = DataLoader(eval_loader, **cfg.uncertainty.eval_dataloader)
 
-    # Create the MC Wrapper
-    mc_wrapper = MCWrapper(model, cfg.uncertainty.mc_samples, cfg.paths.device)
+    eval_uncertainty_model(model=model,
+                           eval_loader=eval_loader,
+                           mc_samples=cfg.uncertainty.mc_samples,
+                           dropout_rate=cfg.uncertainty.dropout_rate,
+                           num_classes=len(cfg.paths.classes),
+                           wb_log="wandb" in OmegaConf.to_container(cfg.paths),
+                           device=cfg.paths.device)
 
-    eval_uncertainty_model(mc_wrapper,
-                           eval_loader,
-                           cfg.uncertainty.mc_samples,
-                           cfg.uncertainty.dropout_rate,
-                           len(cfg.paths.classes),
-                           "wandb" in OmegaConf.to_container(cfg.paths),
-                           cfg.paths.device)
+    if "wandb" in OmegaConf.to_container(cfg.paths):
+        inference_images(model=model,
+                         num_images=cfg.uncertainty.num_images_wandb,
+                         technique=cfg.uncertainty.activation_map,
+                         mc_samples=cfg.uncertainty.mc_samples,
+                         dropout_rate=cfg.uncertainty.dropout_rate,
+                         images_path=join(cfg.paths.dataset, "test"),
+                         cls_names=cfg.paths.classes,
+                         device=cfg.paths.device)
 
 if __name__ == '__main__':
     train()

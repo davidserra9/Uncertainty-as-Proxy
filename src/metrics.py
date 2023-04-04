@@ -53,7 +53,7 @@ def compute_confusion_matrix(y_true, y_pred, cls_names) -> plt.Figure:
     for text_elt, additional_text in zip(ax.texts, samples):
         ax.text(*text_elt.get_position(), '\n' + additional_text, color=text_elt.get_color(),
                 ha='center', va='top', size=10)
-
+    plt.close()
     return fig
 
 def predictive_entropy(mean):
@@ -120,9 +120,8 @@ def uncertainty_box_plot(y_true, y_pred, **metrics):
         df_data[key] = value
     df = pd.DataFrame(df_data)
 
-    fig, axes = plt.subplots(2, len(metrics), figsize=(12, 8))
+    fig, axes = plt.subplots(2, len(metrics), figsize=(5*len(metrics), 8))
     for idx, (key, value) in enumerate(metrics.items()):
-        print(idx)
         subfig = sns.boxplot(data=df,
                              y=key,
                              x="status",
@@ -165,8 +164,8 @@ def uncertainty_box_plot(y_true, y_pred, **metrics):
         axes[0, 0].set_ylabel("Uncertainty values", size="large")
         axes[1, 0].set_ylabel("Normalized KDE/Probability histogram", size="large")
     fig.tight_layout()
-
-    return fig
+    plt.close()
+    return fig, hist_intersection
 
 def uncertainty_curve(y_true, y_pred, **metrics):
     """ Function to compute and plot the Uncertainty Ordering Curve and the corresponding areas under the curve.
@@ -184,7 +183,7 @@ def uncertainty_curve(y_true, y_pred, **metrics):
     """
 
     sns.set_palette(sns.color_palette("Set1"))
-
+    fig = plt.figure(figsize=(6, 6))
     for name, metric in metrics.items():
         accuracy = []
 
@@ -223,5 +222,5 @@ def uncertainty_curve(y_true, y_pred, **metrics):
     plt.xlabel("Percentage of corrected samples (%)")
     plt.ylabel("Accuracy")
     plt.legend(fontsize=12, fancybox=True, shadow=True)
-
-    return plt.figure(1), au, nau
+    plt.close()
+    return fig, au, nau

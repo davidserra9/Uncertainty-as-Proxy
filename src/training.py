@@ -1,6 +1,9 @@
+import random
+import cv2
 import torch
 import wandb
 import time
+import matplotlib.pyplot as plt
 import numpy as np
 from tqdm import tqdm
 from glob import glob
@@ -9,6 +12,8 @@ from src.models import save_model
 from src.metrics import compute_metrics, predictive_entropy, uncertainty_box_plot, uncertainty_curve
 from src.logging import logger
 from src.MC_wrapper import MCWrapper
+from src.CAM_wrapper import AM_initializer, append_maps
+from src.ICM_dataset import get_validation_augmentations
 
 def get_optimizer(model, cfg):
     if cfg.name.lower() == "sgd":
@@ -152,8 +157,10 @@ def eval_uncertainty_model(model, eval_loader, mc_samples, dropout_rate, num_cla
         pred_y = mean.max(axis=1).argmax(axis=-1)
         pred_entropy = predictive_entropy(mean)
 
-        box_plot = uncertainty_box_plot(y_true=true_y, y_pred=pred_y, entropy=pred_entropy)
+        box_plot, intersection = uncertainty_box_plot(y_true=true_y, y_pred=pred_y, entropy=pred_entropy)
         curve, au, nau = uncertainty_curve(y_true=true_y, y_pred=pred_y, ent=pred_entropy)
+
+        logger.info(f"MC Dropout | intersection: {intersection:.4f} - auc: {au:.4f} - nauc: {nau:.4f}")
 
         if wb_log:
             wandb.log({"eval/box_plot": wandb.Image(box_plot),
@@ -162,3 +169,43 @@ def eval_uncertainty_model(model, eval_loader, mc_samples, dropout_rate, num_cla
             wandb.summary["eval/nau"] = nau
 
 
+def inference_images(model, num_images, technique, mc_samples, dropout_rate, images_path, cls_names, device):
+    model.eval()
+    mc_wrapper = MCWrapper(model, num_classes=len(cls_names), mc_samples=mc_samples, dropout_rate=dropout_rate)
+    cam_wrapper = AM_initializer(model, technique)
+
+    transforms = get_validation_augmentations()
+
+    # Obtain "num_images" images from each class
+    cls_paths = glob(join(images_path, "*"))
+    images = {}
+    for cls_path in cls_paths:
+        cls_name = cls_path.split("/")[-1]
+        images[cls_name] = []
+        cls_images = glob(join(cls_path, "*2.jpg"))
+        random.shuffle(cls_images)
+        images[cls_name] = cls_images[:num_images]
+
+    for cls_name, cls_images in images.items():
+        for idx, img_path in enumerate(tqdm(cls_images, desc=f"Inference {cls_name}", leave=False)):
+            # Load images
+            img = cv2.imread(img_path)
+            tensor = transforms(image=img)["image"]
+            tensor = tensor.unsqueeze(0).to(device)
+
+            outputs = mc_wrapper(tensor)
+            mean = np.mean(outputs, axis=1)
+
+            pred_y = mean.max(axis=1).argmax(axis=-1)
+            pred_entropy = predictive_entropy(mean)
+
+            heatmap = cam_wrapper(tensor, idx=pred_y)[0]
+            map = append_maps(img, heatmap)
+
+            results = np.vstack((img/255, map))
+
+            plt.imshow(results)
+            plt.title(f"Class: {cls_name} - Pred: {cls_names[int(pred_y)]} - Entropy: {pred_entropy:.4f}", fontsize=5)
+            plt.axis("off")
+            wandb.log({f"inference/{cls_name}": wandb.Image(plt.gcf())})
+            plt.close()

@@ -11,10 +11,8 @@ optimizer:
     weight_decay: 0.0001
 scheduler:
   name: none
-  params:
-    lr_lambda: 0.65
 oversample: True
-epochs: 15
+epochs: 10
 train_dataloader:
   batch_size: 16
   num_workers: 4

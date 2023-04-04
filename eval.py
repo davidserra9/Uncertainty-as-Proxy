@@ -59,8 +59,5 @@ def eval(cfg: DictConfig) -> None:
     fig.savefig("uncertainty_curve.png")
     plt.close()
 
-
-
-
 if __name__ == '__main__':
     eval()
