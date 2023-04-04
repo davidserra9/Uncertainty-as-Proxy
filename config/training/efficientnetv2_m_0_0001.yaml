@@ -1,0 +1,27 @@
+encoder:
+  name: "efficientnet_v2_m"
+  params:
+    pretrained: true
+    num_classes: 7
+loss: "CrossEntropyLoss"
+optimizer:
+  name: "Adam"
+  params:
+    lr: 0.0001
+    weight_decay: 0.0001
+scheduler:
+  name: none
+oversample: True
+epochs: 10
+train_dataloader:
+  batch_size: 16
+  num_workers: 4
+  shuffle: True
+valid_dataloader:
+  batch_size: 1
+  num_workers: 4
+  shuffle: False
+log_step: 10
+
+
+
