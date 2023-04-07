@@ -61,7 +61,7 @@ def predictive_entropy(mean):
         Parameters
         ----------
         mean : np.array
-            mean of the MC samples with shape (I, N, C)
+            mean of the MC samples with shape (I, C) or (I, N, C)
             I: total number of input annotations
             N: number of images per annotation
             C: number of classes
@@ -71,8 +71,12 @@ def predictive_entropy(mean):
             predictive entropy of the network with shape (I,)
             I: total number of input annotations
     """
+
     epsilon = sys.float_info.min
-    return -np.sum(np.mean(mean, axis=1) * np.log(np.mean(mean, axis=1) + epsilon), axis=-1)
+    if len(mean.shape) == 2:
+        return -np.sum(mean * np.log(mean + epsilon), axis=-1)
+    else:
+        return -np.sum(np.mean(mean, axis=1) * np.log(np.mean(mean, axis=1) + epsilon), axis=-1)
 
 def histogram_intersection(data1, data2, nbins=100):
     """ Function to compute the intersection between two data samples
@@ -167,7 +171,7 @@ def uncertainty_box_plot(y_true, y_pred, **metrics):
     plt.close()
     return fig, hist_intersection
 
-def uncertainty_curve(y_true, y_pred, **metrics):
+def uncertainty_curve(y_true, y_pred, ascending=True, **metrics):
     """ Function to compute and plot the Uncertainty Ordering Curve and the corresponding areas under the curve.
     Parameters
     ----------
@@ -204,7 +208,7 @@ def uncertainty_curve(y_true, y_pred, **metrics):
                  linestyle="--", )
 
         # sort predictions by uncertainty
-        metric, y_true_ord, y_pred_ord = (list(t) for t in zip(*sorted(zip(metric, y_true, y_pred), reverse=True)))
+        metric, y_true_ord, y_pred_ord = (list(t) for t in zip(*sorted(zip(metric, y_true, y_pred), reverse=ascending)))
 
         for idx in range(len(y_true_ord)):
             accuracy.append(accuracy_score(y_true_ord, y_pred_ord))
