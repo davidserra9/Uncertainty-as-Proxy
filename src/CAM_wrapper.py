@@ -86,6 +86,8 @@ class CAM(object):
             weight_fc = list(self.model._modules.get('fc').parameters())[0].data
         elif "EfficientNet" in self.model.__class__.__name__:
             weight_fc = list(self.model._modules.get('classifier').parameters())[0].data
+        elif "ConvNext" in self.model.__class__.__name__:
+            weight_fc = list(self.model._modules.get('fc').parameters())[0].data
         else:
             raise NotImplementedError("Model not implemented")
 
