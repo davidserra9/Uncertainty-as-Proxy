@@ -73,7 +73,9 @@ def predictive_entropy(mean):
     """
 
     epsilon = sys.float_info.min
-    if len(mean.shape) == 2:
+    if len(mean.shape) == 1:
+        return -np.sum(mean * np.log(mean + epsilon))
+    elif len(mean.shape) == 2:
         return -np.sum(mean * np.log(mean + epsilon), axis=-1)
     else:
         return -np.sum(np.mean(mean, axis=1) * np.log(np.mean(mean, axis=1) + epsilon), axis=-1)
