@@ -5,19 +5,19 @@ import sys
 
 class CustomFormatter(logging.Formatter):
 
-    grey = "\x1b[38;20m"
-    yellow = "\x1b[33;20m"
-    red = "\x1b[31;20m"
-    bold_red = "\x1b[31;1m"
-    reset = "\x1b[0m"
+    # grey = "\x1b[38;20m"
+    # yellow = "\x1b[33;20m"
+    # red = "\x1b[31;20m"
+    # bold_red = "\x1b[31;1m"
+    # reset = "\x1b[0m"
     format = "%(asctime)s | %(levelname)s | %(message)s"
 
     FORMATS = {
-        logging.DEBUG: grey + format + reset,
-        logging.INFO: grey + format + reset,
-        logging.WARNING: yellow + format + reset,
-        logging.ERROR: red + format + reset,
-        logging.CRITICAL: bold_red + format + reset
+        logging.DEBUG: format,
+        logging.INFO: format,
+        logging.WARNING: format,
+        logging.ERROR:format,
+        logging.CRITICAL: format
     }
 
     def format(self, record):
@@ -27,17 +27,19 @@ class CustomFormatter(logging.Formatter):
 
 def set_logging():
     logger = logging.getLogger()
-    logger.setLevel(logging.DEBUG)
+    logger.setLevel(logging.INFO)
 
     # Create the root folder if it does not exist
     root_folder = os.path.join(os.getcwd(), "logs")
     if not os.path.exists(root_folder):
+        print("Creating root folder for logs")
         os.makedirs(root_folder)
 
     # Create subfolder for the current run
     timestamp = time.strftime("%Y-%m-%d_%H-%M-%S", time.localtime())
     log_folder = os.path.join(root_folder, timestamp)
     os.makedirs(log_folder)
+    logger.output_path = log_folder
 
     # Set up the log file path
     log_file = os.path.join(log_folder, "log.log")

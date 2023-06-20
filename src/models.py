@@ -1,3 +1,5 @@
+import os.path
+
 import torch
 import torch.nn as nn
 import torchvision
@@ -33,8 +35,19 @@ def get_model(cfg):
         model.name = cfg.name
 
     else:
-        raise ValueError("Model not implemented")
+        logger.error("Model not implemented")
+        raise Exception("Model not implemented")
 
+    st = f"Model {cfg.name} loaded"
+
+    if "weights" in cfg.params:
+        if not os.path.isfile(cfg.params.weights):
+            logger.error(f"File {cfg.params.weights} does not exist. Not loading weights.")
+
+        load_model(model, cfg.params.weights)
+        st += f" with weights {cfg.params.weights}."
+
+    logger.info(st)
     return model
 
 def load_model(model, path):

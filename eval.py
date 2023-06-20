@@ -10,7 +10,7 @@ from src.models import get_model, load_model
 from src.MC_wrapper import MCWrapper
 from src.ICM_dataset import ICMDataset
 from torch.utils.data import DataLoader
-from src.metrics import predictive_entropy, uncertainty_box_plot, uncertainty_curve
+from src.metrics import predictive_entropy, uncertainty_box_plot, uncertainty_curve, correct_incorrect_histogram
 
 
 
@@ -30,7 +30,7 @@ def eval(cfg: DictConfig) -> None:
     test_loader = DataLoader(test_dataset, **cfg.training.valid_dataloader)
 
     model = get_model(cfg.training.encoder)
-    load_model(model, "/home/david/Workspace/weights/efficientnet_b0_25.pth")
+    load_model(model, "/home/david/Workspace/weights/convnext_tiny_21.pth")
     model = model.to("cuda")
 
     mc_wrapper = MCWrapper(model, num_classes=len(cfg.paths.classes), mc_samples=25, dropout_rate=0.25, device="cuda")
@@ -51,11 +51,36 @@ def eval(cfg: DictConfig) -> None:
     pred_y = mean.max(axis=1).argmax(axis=-1)
     pred_entropy = predictive_entropy(mean)
 
-    fig = uncertainty_box_plot(y_true=true_y, y_pred=pred_y, entropy=pred_entropy)
+    # Second ======
+    cfg.training.encoder.name = "efficientnet_v2_m"
+    model = get_model(cfg.training.encoder)
+    load_model(model, "/home/david/Workspace/weights/efficientnet_v2_m_25.pth")
+    model = model.to("cuda")
+
+    mc_wrapper = MCWrapper(model, num_classes=len(cfg.paths.classes), mc_samples=25, dropout_rate=0.25, device="cuda")
+
+    dropout_predictions = np.empty((0, next(iter(test_loader))[0].shape[1], 25, len(cfg.paths.classes)))
+    true_y = np.array([], dtype=np.uint8)
+
+    # Iterate over the loader and stack all the batches predictions
+    for (batch, target) in tqdm(test_loader, desc="Uncertainty with MC Dropout"):
+        batch, target = batch.to("cuda"), target.to("cuda")
+        for b in batch:
+            outputs = mc_wrapper(b)
+            dropout_predictions = np.vstack((dropout_predictions, outputs[np.newaxis, :, :]))
+            true_y = np.append(true_y, target.cpu().numpy())
+
+    mean = np.mean(dropout_predictions, axis=1)
+
+    pred_y2 = mean.max(axis=1).argmax(axis=-1)
+    pred_entropy2 = predictive_entropy(mean)
+
+    # ====
+    fig, inter = correct_incorrect_histogram(y_true=true_y, y_pred=pred_y, entropy=pred_entropy)
     fig.savefig("boxplot.png")
     plt.close()
 
-    fig = uncertainty_curve(y_true=true_y, y_pred=pred_y, ent=pred_entropy)
+    fig, au, nau = uncertainty_curve(y_true=true_y, Convnext_Tiny=(pred_entropy, pred_y), efficientnetB4=(pred_entropy2, pred_y2), random=([np.random.normal(0,1,1) for i in range(len(pred_entropy))], pred_y))
     fig.savefig("uncertainty_curve.png")
     plt.close()
 
