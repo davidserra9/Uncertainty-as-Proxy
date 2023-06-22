@@ -1,3 +1,4 @@
+import os
 import random
 import cv2
 import torch
@@ -7,7 +8,6 @@ import matplotlib.pyplot as plt
 import numpy as np
 from tqdm import tqdm
 from glob import glob
-from os.path import join
 from src.models import save_model
 from src.metrics import compute_metrics, predictive_entropy, uncertainty_box_plot, uncertainty_curve
 from src.logging import logger
@@ -113,24 +113,22 @@ def valid_epoch(model, valid_loader, criterion, log_step, epoch, wb_log, cls_nam
                    "valid/f1": f1,
                    "valid/cm": wandb.Image(cm)})
 
-    return acc, f1
+    return acc, f1, cm
 
 def fit(model, train_loader, valid_loader, criterion, optimizer, scheduler, epochs, wb_log, log_step, cls_names, output_path, device):
     max_acc, max_f1 = 0.0, 0.0
     for epoch in range(epochs):
         train_epoch(model, train_loader, criterion, optimizer, scheduler, log_step=log_step, epoch=epoch, wb_log=wb_log, device=device)
-        acc, f1 = valid_epoch(model, valid_loader, criterion, log_step=log_step, epoch=epoch, wb_log=wb_log, cls_names=cls_names, device=device)
+        acc, f1, cm = valid_epoch(model, valid_loader, criterion, log_step=log_step, epoch=epoch, wb_log=wb_log, cls_names=cls_names, device=device)
 
         msg = f" Epoch {epoch:02} | acc: {acc:.4f} - f1: {f1:.4f}"
         if f1 > max_f1:
             max_f1 = f1
-            if wb_log:
-                model_path = join(output_path, f"{wandb.run.name}.pth")
-            else:
-                model_path = join(output_path, f"{model.name}.pth")
-
+            model_path = os.path.join(output_path, f"epoch_{epochs:0{len(str(epochs))}}_validacc_{acc:.4}_validf1_{f1:.4}.pt")
             save_model(model, optimizer, epoch, acc, f1, model_path)
             msg += " | Model saved @ {}".format(model_path)
+
+            cm.savefig(os.path.join(output_path, f"valid_confusion_matrix.jpg"))
 
         logger.info(msg)
 
@@ -138,7 +136,7 @@ def fit(model, train_loader, valid_loader, criterion, optimizer, scheduler, epoc
         wandb.summary["best_acc"] = max_acc
         wandb.summary["best_f1"] = max_f1
 
-def eval_uncertainty_model(model, eval_loader, mc_samples, dropout_rate, num_classes, wb_log, device):
+def eval_uncertainty_model(model, eval_loader, mc_samples, dropout_rate, num_classes, wb_log, output_path, device):
         mc_wrapper = MCWrapper(model, num_classes=num_classes, mc_samples=mc_samples, dropout_rate=dropout_rate)
 
         dropout_predictions = np.empty((0, next(iter(eval_loader))[0].shape[1], mc_samples, num_classes))
@@ -168,6 +166,8 @@ def eval_uncertainty_model(model, eval_loader, mc_samples, dropout_rate, num_cla
             wandb.summary["eval/au"] = au
             wandb.summary["eval/nau"] = nau
 
+        box_plot.savefig(os.path.join(output_path, "CIH.jpg"))
+        curve.savefig(os.path.join(output_path, "ACC.jpg"))
 
 def inference_images(model, num_images, technique, mc_samples, dropout_rate, images_path, cls_names, device):
     model.eval()
@@ -177,12 +177,12 @@ def inference_images(model, num_images, technique, mc_samples, dropout_rate, ima
     transforms = get_validation_augmentations()
 
     # Obtain "num_images" images from each class
-    cls_paths = glob(join(images_path, "*"))
+    cls_paths = glob(os.path.join(images_path, "*"))
     images = {}
     for cls_path in cls_paths:
         cls_name = cls_path.split("/")[-1]
         images[cls_name] = []
-        cls_images = glob(join(cls_path, "*2.jpg"))
+        cls_images = glob(os.path.join(cls_path, "*2.jpg"))
         random.shuffle(cls_images)
         images[cls_name] = cls_images[:num_images]
 

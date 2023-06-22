@@ -11,7 +11,7 @@ from torch.utils.data import DataLoader
 
 from src.logging import logger
 from src.models import get_model
-from src.training import get_optimizer, get_scheduler, fit
+from src.training import get_optimizer, get_scheduler, fit, eval_uncertainty_model
 from src.ICM_dataset import ICMDataset
 
 def main(cfg):
@@ -26,7 +26,7 @@ def main(cfg):
 
         num_exp = len(wandb.Api().runs(cfg.base.wandb.params.project))
         logger.info(f"Starting experiment {cfg.training.encoder.name}_{num_exp:02} on WANDB.")
-        logger.info(f"Porject: {cfg.base.wandb.params.project}. Entity: {cfg.base.wandb.params.entity}")
+        logger.info(f"Project: {cfg.base.wandb.params.project}. Entity: {cfg.base.wandb.params.entity}")
         wandb.init(project=cfg.base.wandb.params.project,
                    entity=cfg.base.wandb.params.entity,
                    name=f"{cfg.training.encoder.name}_{num_exp:02}",
@@ -55,7 +55,7 @@ def main(cfg):
     train_loader = torch.utils.data.DataLoader(train_dataset, **cfg.training.train_dataloader)
 
     if cfg.training.valid_dataloader.batch_size != 1:
-        logger.warn("The validation batch size must be 1. Changing it to 1.")
+        logger.warn("The valid batch size must be 1. Changing it to 1.")
         cfg.training.valid_dataloader.batch_size = 1
 
     valid_loader = torch.utils.data.DataLoader(valid_dataset, **cfg.training.valid_dataloader)
@@ -73,6 +73,26 @@ def main(cfg):
         cls_names=cfg.base.classes,
         output_path=logger.output_path,
         device=cfg.base.device)
+
+    eval_dataset = ICMDataset(path=os.path.join(cfg.base.dataset, "test"),
+                              train=False,
+                              species=cfg.base.species)
+
+    if cfg.uncertainty.eval_dataloader.batch_size != 1:
+        logger.warn("The test batch size must be 1. Changing it to 1.")
+        cfg.uncertainty.eval_dataloader.batch_size = 1
+
+    eval_loader = torch.utils.data.DataLoader(eval_dataset, **cfg.uncertainty.eval_dataloader)
+
+    eval_uncertainty_model(model=model,
+                           eval_loader=eval_loader,
+                           mc_samples=cfg.uncertainty.mc_samples,
+                           dropout_rate=cfg.uncertainty.dropout_rate,
+                           num_classes=cfg.base.classes,
+                           wb_log="wandb" in cfg.base,
+                           output_path=logger.output_path,
+                           device=cfg.base.device)
+
 
 
 if __name__ == "__main__":
