@@ -163,7 +163,7 @@ def eval_uncertainty_model(model, eval_loader, mc_samples, dropout_rate, num_cla
         box_plot, intersection = uncertainty_box_plot(y_true=true_y, y_pred=pred_y, entropy=pred_entropy)
         curve, au, nau = uncertainty_curve(y_true=true_y, y_pred=pred_y, ent=pred_entropy)
 
-        logger.info(f"MC Dropout | intersection: {intersection:.4f} - auc: {au:.4f} - nauc: {nau:.4f}")
+        logger.info(f"MC Dropout | CII: {intersection:.4f} - AUC: {au:.4f} - NAUC: {nau:.4f}")
 
         if wb_log:
             wandb.log({"eval/box_plot": wandb.Image(box_plot),
