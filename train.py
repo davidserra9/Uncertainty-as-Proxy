@@ -76,7 +76,7 @@ def main(cfg):
 
     eval_dataset = ICMDataset(path=os.path.join(cfg.base.dataset, "test"),
                               train=False,
-                              species=cfg.base.species)
+                              species=cfg.base.classes)
 
     if cfg.uncertainty.eval_dataloader.batch_size != 1:
         logger.warn("The test batch size must be 1. Changing it to 1.")
@@ -88,12 +88,10 @@ def main(cfg):
                            eval_loader=eval_loader,
                            mc_samples=cfg.uncertainty.mc_samples,
                            dropout_rate=cfg.uncertainty.dropout_rate,
-                           num_classes=cfg.base.classes,
+                           num_classes=len(cfg.base.classes),
                            wb_log="wandb" in cfg.base,
                            output_path=logger.output_path,
                            device=cfg.base.device)
-
-
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Train a model following the instructions in the README file")

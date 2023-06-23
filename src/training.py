@@ -8,6 +8,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 from tqdm import tqdm
 from glob import glob
+from datetime import datetime, timedelta
 from src.models import save_model
 from src.metrics import compute_metrics, predictive_entropy, uncertainty_box_plot, uncertainty_curve
 from src.logging import logger
@@ -117,6 +118,8 @@ def valid_epoch(model, valid_loader, criterion, log_step, epoch, wb_log, cls_nam
 
 def fit(model, train_loader, valid_loader, criterion, optimizer, scheduler, epochs, wb_log, log_step, cls_names, output_path, device):
     max_acc, max_f1 = 0.0, 0.0
+    logger.info(f"===== Starting training =====")
+    start = time.time()
     for epoch in range(epochs):
         train_epoch(model, train_loader, criterion, optimizer, scheduler, log_step=log_step, epoch=epoch, wb_log=wb_log, device=device)
         acc, f1, cm = valid_epoch(model, valid_loader, criterion, log_step=log_step, epoch=epoch, wb_log=wb_log, cls_names=cls_names, device=device)
@@ -124,13 +127,15 @@ def fit(model, train_loader, valid_loader, criterion, optimizer, scheduler, epoc
         msg = f" Epoch {epoch:02} | acc: {acc:.4f} - f1: {f1:.4f}"
         if f1 > max_f1:
             max_f1 = f1
-            model_path = os.path.join(output_path, f"epoch_{epochs:0{len(str(epochs))}}_validacc_{acc:.4}_validf1_{f1:.4}.pt")
+            max_acc = acc
+            model_path = os.path.join(output_path, f"epoch_{epoch:0{len(str(epochs))}}_validacc_{acc:.4}_validf1_{f1:.4}.pt")
             save_model(model, optimizer, epoch, acc, f1, model_path)
             msg += " | Model saved @ {}".format(model_path)
 
             cm.savefig(os.path.join(output_path, f"valid_confusion_matrix.jpg"))
 
         logger.info(msg)
+    logger.info(f"=== Training finished in {timedelta(seconds=round(time.time() - start))} w/ ACC: {max_acc:.4f}, F1: {max_f1:.4f} ===")
 
     if wb_log:
         wandb.summary["best_acc"] = max_acc
