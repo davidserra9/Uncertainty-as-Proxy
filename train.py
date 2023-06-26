@@ -14,7 +14,7 @@ from src.models import get_model
 from src.training import get_optimizer, get_scheduler, fit, eval_uncertainty_model
 from src.ICM_dataset import ICMDataset
 
-def main(cfg):
+def main(cfg) -> None:
 
     # Check which device is used
     if torch.cuda.is_available() and "cuda" in cfg.base.device:
@@ -55,7 +55,7 @@ def main(cfg):
     train_loader = torch.utils.data.DataLoader(train_dataset, **cfg.training.train_dataloader)
 
     if cfg.training.valid_dataloader.batch_size != 1:
-        logger.warn("The valid batch size must be 1. Changing it to 1.")
+        logger.warning("The valid batch size must be 1. Changing it to 1.")
         cfg.training.valid_dataloader.batch_size = 1
 
     valid_loader = torch.utils.data.DataLoader(valid_dataset, **cfg.training.valid_dataloader)

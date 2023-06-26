@@ -2,3 +2,4 @@ defaults:
   - base: home
   - training: efficientnet_b0_0_001
   - uncertainty: wrapper_1
+  - inference: home

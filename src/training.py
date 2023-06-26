@@ -114,20 +114,21 @@ def valid_epoch(model, valid_loader, criterion, log_step, epoch, wb_log, cls_nam
                    "valid/f1": f1,
                    "valid/cm": wandb.Image(cm)})
 
-    return acc, f1, cm
+    return acc, f1, running_loss / (idx+1), cm
 
 def fit(model, train_loader, valid_loader, criterion, optimizer, scheduler, epochs, wb_log, log_step, cls_names, output_path, device):
-    max_acc, max_f1 = 0.0, 0.0
+    max_acc, max_f1, min_loss = 0.0, 0.0, 1000000.0
     logger.info(f"===== Starting training =====")
     start = time.time()
     for epoch in range(epochs):
         train_epoch(model, train_loader, criterion, optimizer, scheduler, log_step=log_step, epoch=epoch, wb_log=wb_log, device=device)
-        acc, f1, cm = valid_epoch(model, valid_loader, criterion, log_step=log_step, epoch=epoch, wb_log=wb_log, cls_names=cls_names, device=device)
+        acc, f1, loss, cm = valid_epoch(model, valid_loader, criterion, log_step=log_step, epoch=epoch, wb_log=wb_log, cls_names=cls_names, device=device)
 
-        msg = f" Epoch {epoch:02} | acc: {acc:.4f} - f1: {f1:.4f}"
+        msg = f" Epoch {epoch:02} | acc: {acc:.4f} - f1: {f1:.4f} - loss: {loss:.4f}"
         if f1 > max_f1:
             max_f1 = f1
             max_acc = acc
+            min_loss = loss
             model_path = os.path.join(output_path, f"epoch_{epoch:0{len(str(epochs))}}_validacc_{acc:.4}_validf1_{f1:.4}.pt")
             save_model(model, optimizer, epoch, acc, f1, model_path)
             msg += " | Model saved @ {}".format(model_path)
@@ -135,33 +136,31 @@ def fit(model, train_loader, valid_loader, criterion, optimizer, scheduler, epoc
             cm.savefig(os.path.join(output_path, f"valid_confusion_matrix.jpg"))
 
         logger.info(msg)
-    logger.info(f"=== Training finished in {timedelta(seconds=round(time.time() - start))} w/ ACC: {max_acc:.4f}, F1: {max_f1:.4f} ===")
+    logger.info(f"=== Training finished in {timedelta(seconds=round(time.time() - start))} w/ ACC: {max_acc:.4f}, F1: {max_f1:.4f}, LOSS: {min_loss:.4f} ===")
 
     if wb_log:
         wandb.summary["best_acc"] = max_acc
         wandb.summary["best_f1"] = max_f1
+        wandb.summary["best_loss"] = min_loss
+
 
 def eval_uncertainty_model(model, eval_loader, mc_samples, dropout_rate, num_classes, wb_log, output_path, device):
         mc_wrapper = MCWrapper(model, num_classes=num_classes, mc_samples=mc_samples, dropout_rate=dropout_rate)
 
         dropout_predictions = np.empty((0, next(iter(eval_loader))[0].shape[1], mc_samples, num_classes))
-        true_y = np.array([], dtype=np.uint8)
+        pred_y, true_y, uncertainty = np.array([], dtype=np.uint8), np.array([], dtype=np.uint8), np.array([])
 
         # Iterate over the loader and stack all the batches predictions
         for (batch, target) in tqdm(eval_loader, desc="Uncertainty with MC Dropout", leave=False):
             batch, target = batch.to(device), target.to(device)
             for b in batch:
-                outputs = mc_wrapper(b)
-                dropout_predictions = np.vstack((dropout_predictions, outputs[np.newaxis, :, :]))
+                prediction, uncertainty = mc_wrapper(b)
+                pred_y = np.append(pred_y, prediction)
                 true_y = np.append(true_y, target.cpu().numpy())
+                uncertainty = np.append(uncertainty, uncertainty)
 
-        mean = np.mean(dropout_predictions, axis=1)
-
-        pred_y = mean.max(axis=1).argmax(axis=-1)
-        pred_entropy = predictive_entropy(mean)
-
-        box_plot, intersection = uncertainty_box_plot(y_true=true_y, y_pred=pred_y, entropy=pred_entropy)
-        curve, au, nau = uncertainty_curve(y_true=true_y, y_pred=pred_y, ent=pred_entropy)
+        box_plot, intersection = uncertainty_box_plot(y_true=true_y, y_pred=pred_y, entropy=uncertainty)
+        curve, au, nau = uncertainty_curve(y_true=true_y, y_pred=pred_y, ent=uncertainty)
 
         logger.info(f"MC Dropout | CII: {intersection:.4f} - AUC: {au:.4f} - NAUC: {nau:.4f}")
 

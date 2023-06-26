@@ -7,7 +7,6 @@ import torchvision.models as models
 from packaging import version
 from src.logging import logger
 
-
 def get_model(cfg):
     if version.parse(torchvision.__version__) < version.parse("0.13.0"):
         logger.error("The torchvision version must be >= 0.13.0")

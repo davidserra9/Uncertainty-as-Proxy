@@ -9,7 +9,7 @@ The implemented architectures are:
     - EfficientNetV2
     - ConvNeXt
 """
-
+import sys
 import torch
 import numpy as np
 import torch.nn as nn
@@ -101,6 +101,19 @@ class MCWrapper(object):
                 setattr(model, name, new)
         return model
 
+    def predictive_entropy(self, mean):
+        """ Predictive entropy of the dropout mean
+
+            Parameters
+            ----------
+            dropout_mean : np.array
+                Array with shape (B, L)
+                B: batch size or number of images in the dataloader
+                L: number of classes
+        """
+        epsilon = sys.float_info.min
+        return -np.sum(mean * np.log(mean + epsilon))
+
     def forward(self, x):
         """ N forward passes of the model
 
@@ -121,16 +134,18 @@ class MCWrapper(object):
             S: number of monte-carlo samples
             L: number of classes
         """
-        dropout_predictions = np.empty((0, x.shape[0], self.num_classes))
-        for _ in range(self.samples):
+        dropout_predictions = np.empty((self.samples, self.num_classes))
+        for i in range(self.samples):
             with torch.no_grad():
                 outputs = self.model(x)
                 #outputs = torch.stack([self.model(x[i, :, :, :, :].to(self.device)) for i in range(x.shape[0])])
                 outputs = self.softmax(outputs)
 
-            dropout_predictions = np.vstack((dropout_predictions, outputs.cpu().numpy()[np.newaxis, :, :]))
+            dropout_predictions[i] = outputs.cpu().numpy()
 
-        return dropout_predictions.transpose(1, 0, 2)
+        dropout_mean = np.mean(dropout_predictions, axis=0)
+
+        return dropout_mean.argmax(axis=0).item(), self.predictive_entropy(dropout_mean)
 
     def __call__(self, x):
         return self.forward(x)

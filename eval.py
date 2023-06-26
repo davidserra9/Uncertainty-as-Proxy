@@ -1,88 +1,78 @@
+import os
 import torch
-import hydra
-import numpy as np
-import matplotlib.pyplot as plt
-from tqdm import tqdm
-from os.path import join
-from omegaconf import DictConfig, OmegaConf
+import time
+import sys
+import argparse
+from datetime import timedelta
+from hydra import compose, initialize
+from torch import nn
+from omegaconf import OmegaConf
 from src.logging import logger
-from src.models import get_model, load_model
-from src.MC_wrapper import MCWrapper
+from src.models import get_model
 from src.ICM_dataset import ICMDataset
 from torch.utils.data import DataLoader
-from src.metrics import predictive_entropy, uncertainty_box_plot, uncertainty_curve, correct_incorrect_histogram
+from src.training import valid_epoch, eval_uncertainty_model
 
-
-
-@hydra.main(config_path="config", config_name="config", version_base="1.3")
-def eval(cfg: DictConfig) -> None:
+def main(cfg) -> None:
 
     # Find which device is used
-    if torch.cuda.is_available() and cfg.paths.device == "cuda":
+    if torch.cuda.is_available() and cfg.base.device == "cuda":
         logger.info(f'Training the model in {torch.cuda.get_device_name(torch.cuda.current_device())}')
     else:
         logger.warn('CAREFUL!! Training the model with CPU')
 
-    test_dataset = ICMDataset(path=join(cfg.paths.dataset, "test"),
-                               train=False,
-                               species=cfg.paths.classes)
-
-    test_loader = DataLoader(test_dataset, **cfg.training.valid_dataloader)
-
+    # Create the model
     model = get_model(cfg.training.encoder)
-    load_model(model, "/home/david/Workspace/weights/convnext_tiny_21.pth")
-    model = model.to("cuda")
+    model = model.to(cfg.base.device)
 
-    mc_wrapper = MCWrapper(model, num_classes=len(cfg.paths.classes), mc_samples=25, dropout_rate=0.25, device="cuda")
+    # Load loss, optimizer and scheduler
+    criterion = getattr(nn, cfg.training.loss)()
 
-    dropout_predictions = np.empty((0, next(iter(test_loader))[0].shape[1], 25, len(cfg.paths.classes)))
-    true_y = np.array([], dtype=np.uint8)
+    # Load evaluation dataset
+    eval_dataset = ICMDataset(path=os.path.join(cfg.base.dataset, "test"),
+                              train=False,
+                              species=cfg.base.classes)
 
-    # Iterate over the loader and stack all the batches predictions
-    for (batch, target) in tqdm(test_loader, desc="Uncertainty with MC Dropout"):
-        batch, target = batch.to("cuda"), target.to("cuda")
-        for b in batch:
-            outputs = mc_wrapper(b)
-            dropout_predictions = np.vstack((dropout_predictions, outputs[np.newaxis, :, :]))
-            true_y = np.append(true_y, target.cpu().numpy())
+    if cfg.uncertainty.eval_dataloader.batch_size != 1:
+        logger.warn("The test batch size must be 1. Changing it to 1.")
+        cfg.uncertainty.eval_dataloader.batch_size = 1
 
-    mean = np.mean(dropout_predictions, axis=1)
+    eval_loader = torch.utils.data.DataLoader(eval_dataset, **cfg.uncertainty.eval_dataloader)
 
-    pred_y = mean.max(axis=1).argmax(axis=-1)
-    pred_entropy = predictive_entropy(mean)
+    logger.info("===== Starting evaluation =====")
+    start = time.time()
+    acc, f1, loss, cm = valid_epoch(model,
+                                    eval_loader,
+                                    criterion,
+                                    log_step=cfg.training.log_step,
+                                    epoch=0,
+                                    wb_log=False,
+                                    cls_names=cfg.base.classes,
+                                    device=cfg.base.device)
 
-    # Second ======
-    cfg.training.encoder.name = "efficientnet_v2_m"
-    model = get_model(cfg.training.encoder)
-    load_model(model, "/home/david/Workspace/weights/efficientnet_v2_m_25.pth")
-    model = model.to("cuda")
+    cm.savefig(os.path.join(logger.output_path, "test_confusion_matrix.jpg"))
 
-    mc_wrapper = MCWrapper(model, num_classes=len(cfg.paths.classes), mc_samples=25, dropout_rate=0.25, device="cuda")
+    logger.info(f"Accuracy: {acc:.4f} | F1: {f1:.4f} | Loss: {loss:.4f}")
 
-    dropout_predictions = np.empty((0, next(iter(test_loader))[0].shape[1], 25, len(cfg.paths.classes)))
-    true_y = np.array([], dtype=np.uint8)
+    eval_uncertainty_model(model=model,
+                           eval_loader=eval_loader,
+                           mc_samples=cfg.uncertainty.mc_samples,
+                           dropout_rate=cfg.uncertainty.dropout_rate,
+                           num_classes=len(cfg.base.classes),
+                           wb_log=False,
+                           output_path=logger.output_path,
+                           device=cfg.base.device)
 
-    # Iterate over the loader and stack all the batches predictions
-    for (batch, target) in tqdm(test_loader, desc="Uncertainty with MC Dropout"):
-        batch, target = batch.to("cuda"), target.to("cuda")
-        for b in batch:
-            outputs = mc_wrapper(b)
-            dropout_predictions = np.vstack((dropout_predictions, outputs[np.newaxis, :, :]))
-            true_y = np.append(true_y, target.cpu().numpy())
+    logger.info(f"===== Evaluation finished in {timedelta(seconds=round(time.time() - start))} =====")
 
-    mean = np.mean(dropout_predictions, axis=1)
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Evaluate a model following the instructions in the README file")
+    parser.add_argument('--config', default='config.yaml')
+    args = parser.parse_args(sys.argv[1:])
+    config_name = args.config
 
-    pred_y2 = mean.max(axis=1).argmax(axis=-1)
-    pred_entropy2 = predictive_entropy(mean)
+    initialize(version_base=None, config_path="config", job_name="training")
+    config = compose(config_name=config_name)
+    config = OmegaConf.create(config)
+    main(config)
 
-    # ====
-    fig, inter = correct_incorrect_histogram(y_true=true_y, y_pred=pred_y, entropy=pred_entropy)
-    fig.savefig("boxplot.png")
-    plt.close()
-
-    fig, au, nau = uncertainty_curve(y_true=true_y, Convnext_Tiny=(pred_entropy, pred_y), efficientnetB4=(pred_entropy2, pred_y2), random=([np.random.normal(0,1,1) for i in range(len(pred_entropy))], pred_y))
-    fig.savefig("uncertainty_curve.png")
-    plt.close()
-
-if __name__ == '__main__':
-    eval()
