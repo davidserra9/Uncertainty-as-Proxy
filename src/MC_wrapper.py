@@ -111,8 +111,7 @@ class MCWrapper(object):
                 B: batch size or number of images in the dataloader
                 L: number of classes
         """
-        epsilon = sys.float_info.min
-        return -np.sum(mean * np.log(mean + epsilon))
+        return -np.sum(mean * np.log(mean + sys.float_info.min))
 
     def forward(self, x):
         """ N forward passes of the model
@@ -134,7 +133,7 @@ class MCWrapper(object):
             S: number of monte-carlo samples
             L: number of classes
         """
-        dropout_predictions = np.empty((self.samples, self.num_classes))
+        dropout_predictions = np.empty((self.samples, x.shape[0], self.num_classes))
         for i in range(self.samples):
             with torch.no_grad():
                 outputs = self.model(x)
@@ -144,6 +143,9 @@ class MCWrapper(object):
             dropout_predictions[i] = outputs.cpu().numpy()
 
         dropout_mean = np.mean(dropout_predictions, axis=0)
+
+        if len(dropout_mean.shape) > 1: # If more than one image per annotation
+            dropout_mean = np.mean(dropout_mean, axis=0)
 
         return dropout_mean.argmax(axis=0).item(), self.predictive_entropy(dropout_mean)
 

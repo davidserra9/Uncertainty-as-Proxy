@@ -42,10 +42,10 @@ class ICMDataset(Dataset):
 
             for folder_path in glob(join(path, "*")):
                 if os.path.isdir(folder_path):
-                    species_annot = len(glob(join(folder_path, "*2.jpg")))
+                    species_annot = len(glob(join(folder_path, "*0.jpg")))
                     annot_counter = 0
                     for _ in range(-(max_annotations // -species_annot)):
-                        for annot_path in glob(join(folder_path, "*2.jpg")):
+                        for annot_path in glob(join(folder_path, "*0.jpg")):
                             self.images += [annot_path[:-5] + str(i) + annot_path[-4:] for i in range(5)]
                             self.labels += [species.index(folder_path.split("/")[-1])] * 5
                             annot_counter += 1

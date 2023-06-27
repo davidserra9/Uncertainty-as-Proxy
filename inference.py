@@ -6,6 +6,7 @@ import argparse
 import numpy as np
 import pandas as pd
 from PIL import Image
+from matplotlib import pyplot as plt
 from tqdm import tqdm
 from hydra import compose, initialize
 from omegaconf import OmegaConf
@@ -106,12 +107,6 @@ def main(cfg) -> None:
 
                 prediction, uncertainty = mc_model(input_tensor)
 
-                if "class_activation_maps" in cfg.inference:
-                    output = model(input_tensor)
-                    cam = cam_model(prediction, output)
-                    result = np.array(torchcam.utils.overlay_mask(Image.fromarray(image), to_pil_image(cam[0].squeeze(0), mode='F'), alpha=0.8))
-                    vidout.write(result[:, :, ::-1])
-
                 if prediction not in cfg.inference.skip_classes:
                     df.loc[len(df.index)] = [os.path.basename(vid_path).split('.')[0],
                                              vid_path,
@@ -119,6 +114,16 @@ def main(cfg) -> None:
                                              pd.to_timedelta(frame/fps, unit='s'),
                                              cfg.base.classes[int(prediction)],
                                              uncertainty]
+
+                    if "class_activation_maps" in cfg.inference:
+                        output = model(input_tensor)
+                        cam = cam_model(prediction, output)
+                        result = np.array(torchcam.utils.overlay_mask(Image.fromarray(image), to_pil_image(cam[0].squeeze(0), mode='F'), alpha=0.8))
+                        vidout.write(result[..., ::-1])
+
+                else:
+                    if "class_activation_maps" in cfg.inference:
+                        vidout.write(image[..., ::-1])
 
             else:
                 logger.error(f"Error reading frame {frame} from video {vid_path}")

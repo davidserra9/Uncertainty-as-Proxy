@@ -147,20 +147,19 @@ def fit(model, train_loader, valid_loader, criterion, optimizer, scheduler, epoc
 def eval_uncertainty_model(model, eval_loader, mc_samples, dropout_rate, num_classes, wb_log, output_path, device):
         mc_wrapper = MCWrapper(model, num_classes=num_classes, mc_samples=mc_samples, dropout_rate=dropout_rate)
 
-        dropout_predictions = np.empty((0, next(iter(eval_loader))[0].shape[1], mc_samples, num_classes))
-        pred_y, true_y, uncertainty = np.array([], dtype=np.uint8), np.array([], dtype=np.uint8), np.array([])
+        pred_y, true_y, pred_unc = np.array([], dtype=np.uint8), np.array([], dtype=np.uint8), np.array([])
 
         # Iterate over the loader and stack all the batches predictions
         for (batch, target) in tqdm(eval_loader, desc="Uncertainty with MC Dropout", leave=False):
             batch, target = batch.to(device), target.to(device)
-            for b in batch:
+            for b, t in zip(batch, target.cpu().numpy()):
                 prediction, uncertainty = mc_wrapper(b)
                 pred_y = np.append(pred_y, prediction)
-                true_y = np.append(true_y, target.cpu().numpy())
-                uncertainty = np.append(uncertainty, uncertainty)
+                pred_unc = np.append(pred_unc, uncertainty)
+                true_y = np.append(true_y, t)
 
-        box_plot, intersection = uncertainty_box_plot(y_true=true_y, y_pred=pred_y, entropy=uncertainty)
-        curve, au, nau = uncertainty_curve(y_true=true_y, y_pred=pred_y, ent=uncertainty)
+        box_plot, intersection = uncertainty_box_plot(y_true=true_y, y_pred=pred_y, entropy=pred_unc)
+        curve, au, nau = uncertainty_curve(y_true=true_y, y_pred=pred_y, ent=pred_unc)
 
         logger.info(f"MC Dropout | CII: {intersection:.4f} - AUC: {au:.4f} - NAUC: {nau:.4f}")
 

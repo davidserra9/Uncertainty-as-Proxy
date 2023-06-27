@@ -17,7 +17,7 @@ def main(cfg) -> None:
 
     # Find which device is used
     if torch.cuda.is_available() and cfg.base.device == "cuda":
-        logger.info(f'Training the model in {torch.cuda.get_device_name(torch.cuda.current_device())}')
+        logger.info(f'Evaluating the model in {torch.cuda.get_device_name(torch.cuda.current_device())}')
     else:
         logger.warn('CAREFUL!! Training the model with CPU')
 
