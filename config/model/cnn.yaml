@@ -1,0 +1,7 @@
+# Model configuration file
+encoder:
+  name: "efficientnet_b0" #efficientnet_bX, efficientnet_v2_X, convnext_X
+  params: # pretrained, num_classes, weights (not required)
+    pretrained: true
+    num_classes: 7
+    # weights: /home/david/Workspace/UncertaintyProxy/logs/2023-06-27_16-29-55/epoch_10_validacc_0.8745_validf1_0.8109.pt
