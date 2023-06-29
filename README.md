@@ -95,3 +95,5 @@ To run inference on a model, run the following command. This will run inference 
 ```bash
 python inference.py --config config/config.yaml
 ```
+
+Feel free to modify the configuration files to adapt the parameters based on your specific needs.
