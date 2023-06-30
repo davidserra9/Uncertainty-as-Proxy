@@ -6,13 +6,17 @@
 
 [Insitut de Ciències del Mar, Spanish National Research Council (CSIC)](https://icm.csic.es/en)
 
-This repositoy contains all the code and software of the paper Uncertainty Aware Deep Learning Classification of Marine Species from ROV Vehicle Videos. The software is designed to classify Marine Species using MonteCarlo Dropout to generate, in addition to the prediction, an associated estimate of uncertainty. 
+This repositoy contains all the code and software of the paper "Uncertainty Aware Deep Learning Classification of Marine Species from ROV Vehicle Videos". The software is designed to classify Marine Species using MonteCarlo Dropout to generate predictions along with associated estimates of uncertainty.
 
-We experiment with uncertainty estimations and a novel dataset of ROV vehicle images from the Mediterranean Sea, called ICM-20. We find that using uncertainty can make a better use of human annotators efforts when correcting possible misclassified samples.
+The repository contains the code to replicate the experiments conducted in the paper. The experiments focus on uncertainty estimations and utilize a novel dataset of ROV vehicle images from the Mediterranean Sea, called ICM-20. The results demonstrate that incorporating uncertainty estimates can improve the utilization of human annotators' efforts when correcting misclassified samples.
 
-This repository also contains the code to generate the Correct versus Incorrent Histogram (CIH) and the Accuracy versus Corrected Curve (ACC) proposed in the paper.
+Additionally, the repository includes the code to generate the Correct versus Incorrent Histogram (CIH) and the Accuracy versus Corrected Curve (ACC) proposed in the paper.
+
+## Requirements
+Python >= 3.6, Torchvision >= 0.13.0 (to use ConvNeXt), Pytorch, Numpy,  
 
 ## Installation
+To install the required dependencies, create a conda environment. 
 Create a conda environment named `uncertainty` and install the dependencies:
 
 ```bash
@@ -20,15 +24,9 @@ Create a conda environment named `uncertainty` and install the dependencies:
 
 ## Usage
 ### Configuration files
-The entire pipeline uses `.yaml` config files to set the run parameters. These config files are stored in the `config` folder. The config files are divided into five categories: `base`, `model`, `training`, `uncertainty` and `inference`:
+The pipeline uses `.yaml` config files to set the parameters for various aspects of the code. These config files are stored in the `config` folder and are divided into five categories: `base`, `model`, `training`, `uncertainty` and `inference`. Each category corresponds to specific parameters related to the respective process.
 
-- `base` contains the base parameters for the run. These parameters are common to all the runs such as dataset path, class names and wandb parameters.
-- `model` contains the model parameters. These parameters are specific to the model architecture.
-- `training` contains the training parameters. These parameters are specific to the training process such as learning rate, optimizer, etc.
-- `uncertainty` contains the uncertainty parameters. These parameters are specific to the uncertainty estimation process such as the number of samples to use in the MonteCarlo Dropout.
-- `inference` contains the inference parameters. These parameters are specific the type of outputs when running the code for inference.
-
-Then a parent config file groups the names of the corresponding files for each category:
+The parent config file groups the individual files for each category, as shown below:
 
 ```yaml
 defaults:
@@ -39,10 +37,10 @@ defaults:
   - inference: inference_example
 ```
 
-Not all config divisions are used in all the runs (train, evaluate, inference). On every folder there is an example file with the explanation of the parameters.
+You can modify teh values in the individual config files or create new ones based on the provided examples.
 
 ### Log files
-The code will create a log folder in the repository in the first run of the code. Then, each run will create a subfolder with the timestamp of run. The log folder will contain all the files generated during the run. There will always be a log.log containing all the information and state of the run. The files according to the type of run are:
+During the execution of the code, a log folder will be created in the repository. Each run will generate a subfolder with a timestamp, containing all the files generated during that run. The log folder will always contain a `log.log` file, which provides information about the state fo the run. Additionally, the log files specific to each type of run are organized as follows:
 ```
 📂logs/
 ├── 📂YYYY-MM-DD_HH-MM-SS/ (train.py log)
