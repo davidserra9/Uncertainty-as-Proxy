@@ -29,7 +29,7 @@ def main(cfg) -> None:
     criterion = getattr(nn, cfg.training.loss)()
 
     # Load evaluation dataset
-    eval_dataset = ICMDataset(path=os.path.join(cfg.base.dataset, "test"),
+    eval_dataset = ICMDataset(path=os.path.join(cfg.base.dataset, "valid"),
                               train=False,
                               species=cfg.base.classes)
 
